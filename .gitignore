@@ -1,0 +1,31 @@
+# This is the main .gitignore file. Patterns in here will apply in sub directories too.
+
+# Ignore basic Java files
+*.jar
+*.class
+
+# Ignore Intellij files
+*.iml
+*.ipr
+*.iws
+atlassian-ide-plugin.xml
+.idea/
+dependency-reduced-pom.xml
+
+# Ignore Eclipse files
+.classpath
+.project
+.settings/
+
+# Ignore Maven files
+target/
+
+# Ignore JOE files
+*~
+
+# Ignore INTLJ output 
+out/
+build/
+
+# Ignore Gradle temp dir
+.gradle/
