@@ -79,6 +79,7 @@
     <findbugs.version>2.0.1</findbugs.version>
     <beanutils.version>1.8.3</beanutils.version>
     <junit.version>4.11</junit.version>
+    <logback.version>1.0.9</logback.version>
   </properties>
 
   <dependencyManagement>
@@ -126,6 +127,18 @@
         <version>${junit.version}</version>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-core</artifactId>
+        <version>${logback.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>${logback.version}</version>
+        <scope>test</scope>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -163,6 +176,16 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -297,26 +320,6 @@
       <build>
         <pluginManagement>
           <plugins>
-            <!-- Generate a timestamp property -->
-            <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>buildnumber-maven-plugin</artifactId>
-              <version>1.3</version>
-              <executions>
-                <execution>
-                  <id>create-timestamp</id>
-                  <phase>validate</phase>
-                  <goals>
-                    <goal>create-timestamp</goal>
-                  </goals>
-                  <configuration>
-                    <timestampPropertyName>package.build.year</timestampPropertyName>
-                    <timestampFormat>yyyy</timestampFormat>
-                  </configuration>
-                </execution>
-              </executions>
-            </plugin>
-
             <!-- Source jar -->
             <plugin>
               <groupId>org.apache.maven.plugins</groupId>
@@ -348,7 +351,7 @@
                 </links>
                 <excludePackageNames>*.internal.*</excludePackageNames>
                 <bottom>
-                  <![CDATA[Copyright ${package.build.year} Cask, Inc. <a href="http://www.apache.org/licenses/LICENSE-2.0">Licensed under the Apache License, Version 2.0</a>]]>
+                  <![CDATA[Copyright {currentYear} Cask, Inc. <a href="http://www.apache.org/licenses/LICENSE-2.0">Licensed under the Apache License, Version 2.0</a>]]>
                 </bottom>
               </configuration>
               <executions>
@@ -397,11 +400,6 @@
         </pluginManagement>
 
         <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>buildnumber-maven-plugin</artifactId>
-            <version>1.3</version>
-          </plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-source-plugin</artifactId>
