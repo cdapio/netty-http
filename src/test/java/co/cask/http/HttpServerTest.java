@@ -361,6 +361,18 @@ public class HttpServerTest {
     testContent("/test/v1/multi-match/foo", "multi-match-put-actual-foo", HttpMethod.PUT);
   }
 
+  @Test
+  public void testChunkResponse() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/chunk", HttpMethod.POST);
+    try {
+      writeContent(urlConn, "Testing message");
+      String response = getContent(urlConn);
+      System.out.println(response);
+    } finally {
+      urlConn.disconnect();
+    }
+  }
+
   protected void testContent(String path, String content) throws IOException {
     testContent(path, content, HttpMethod.GET);
   }
