@@ -17,7 +17,6 @@
 package co.cask.http;
 
 import com.google.common.base.Charsets;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
@@ -35,7 +34,7 @@ import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
 /**
- * Base implementation of {@link HttpResponder} to simplifies children implementation.
+ * Base implementation of {@link HttpResponder} to simplifies child implementations.
  */
 public abstract class AbstractHttpResponder implements HttpResponder {
 
@@ -105,10 +104,7 @@ public abstract class AbstractHttpResponder implements HttpResponder {
   }
 
   @Override
-  public void sendError(HttpResponseStatus status, String errorMessage) {
-    Preconditions.checkArgument(!status.equals(HttpResponseStatus.OK), "Response status cannot be OK for errors");
-
-    ChannelBuffer errorContent = ChannelBuffers.wrappedBuffer(Charsets.UTF_8.encode(errorMessage));
-    sendContent(status, errorContent, "text/plain; charset=utf-8", ImmutableMultimap.<String, String>of());
+  public final void sendError(HttpResponseStatus status, String errorMessage) {
+    sendString(status, errorMessage);
   }
 }

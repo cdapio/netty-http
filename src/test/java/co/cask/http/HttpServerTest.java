@@ -247,7 +247,6 @@ public class HttpServerTest {
     HttpURLConnection urlConn = request("/test/v1/tweets/1", HttpMethod.PUT, true);
     writeContent(urlConn, "data");
     Assert.assertEquals(200, urlConn.getResponseCode());
-    System.out.println(urlConn.getHeaderField(HttpHeaders.Names.CONNECTION));
 
     Assert.assertEquals("keep-alive", urlConn.getHeaderField(HttpHeaders.Names.CONNECTION));
     urlConn.disconnect();
@@ -367,7 +366,7 @@ public class HttpServerTest {
     try {
       writeContent(urlConn, "Testing message");
       String response = getContent(urlConn);
-      System.out.println(response);
+      Assert.assertEquals("Testing message", response);
     } finally {
       urlConn.disconnect();
     }
