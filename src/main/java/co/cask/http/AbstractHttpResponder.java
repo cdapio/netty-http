@@ -34,7 +34,7 @@ import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
 /**
- * Base implementation of {@link HttpResponder} to simplifies child implementations.
+ * Base implementation of {@link HttpResponder} to simplify child implementations.
  */
 public abstract class AbstractHttpResponder implements HttpResponder {
 
