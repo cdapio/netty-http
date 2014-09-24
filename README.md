@@ -5,7 +5,7 @@ A library to develop HTTP services with [Netty](http://netty.io/). Supports the 
 <!--
 Does it work?
 -------------
-[![Build Status](https://travis-ci.org/caskco/netty-http.svg?branch=develop)](https://travis-ci.org/caskco/netty-http)
+[![Build Status](https://travis-ci.org/caskdata/netty-http.svg?branch=develop)](https://travis-ci.org/caskdata/netty-http)
 -->
 
 Need for this library 
@@ -22,7 +22,7 @@ This library solves these problems using [JAX-RS](https://jax-rs-spec.java.net/)
 Build the HTTP Library
 ----------------------
 ```
-  $ git clone https://github.com/caskco/netty-http.git
+  $ git clone https://github.com/caskdata/netty-http.git
   $ cd netty-http
   $ mvn clean package
 ```
@@ -177,9 +177,9 @@ Are you interested in making netty-http better? Our development model is a simpl
  * Fork netty-http into your own GitHub repository
  * Create a topic branch with an appropriate name
  * Work on your favorite feature to your content
- * Once you are satisifed, create a pull request by going to the caskco/netty-http project.
+ * Once you are satisifed, create a pull request by going to the caskdata/netty-http project.
  * Address all the review comments
- * Once addressed, the changes will be committed to the caskco/netty-http repo.
+ * Once addressed, the changes will be committed to the caskdata/netty-http repo.
 
 ## License
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
