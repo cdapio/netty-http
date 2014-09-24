@@ -49,24 +49,15 @@
   </scm>
 
   <distributionManagement>
-    <!--<repository>-->
-      <!--<id>sonatype.release</id>-->
-      <!--<url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>-->
-    <!--</repository>-->
-    <!--<snapshotRepository>-->
-      <!--<id>sonatype.snapshots</id>-->
-      <!--<url>https://oss.sonatype.org/content/repositories/snapshots</url>-->
-    <!--</snapshotRepository>-->
     <repository>
-      <id>nexus</id>
-      <url>https://repository.continuuity.com/service/local/staging/deploy/maven2</url>
+      <id>sonatype.release</id>
+      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
     </repository>
     <snapshotRepository>
-      <id>continuuity</id>
-      <url>https://repository.continuuity.com/content/repositories/snapshots/</url>
+      <id>sonatype.snapshots</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
     </snapshotRepository>
   </distributionManagement>
-
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <surefire.redirectTestOutputToFile>true</surefire.redirectTestOutputToFile>
@@ -432,17 +423,17 @@
             </plugin>
 
             <!-- Nexus deploy plugin -->
-            <!--<plugin>-->
-              <!--<groupId>org.sonatype.plugins</groupId>-->
-              <!--<artifactId>nexus-staging-maven-plugin</artifactId>-->
-              <!--<version>1.6.2</version>-->
-              <!--<extensions>true</extensions>-->
-              <!--<configuration>-->
-                <!--<nexusUrl>https://oss.sonatype.org</nexusUrl>-->
-                <!--<serverId>sonatype.release</serverId>-->
-                <!--<stagingProfileId>655dc88dc770c3</stagingProfileId>-->
-              <!--</configuration>-->
-            <!--</plugin>-->
+            <plugin>
+              <groupId>org.sonatype.plugins</groupId>
+              <artifactId>nexus-staging-maven-plugin</artifactId>
+              <version>1.6.2</version>
+              <extensions>true</extensions>
+              <configuration>
+                <nexusUrl>https://oss.sonatype.org</nexusUrl>
+                <serverId>sonatype.release</serverId>
+                <stagingProfileId>655dc88dc770c3</stagingProfileId>
+              </configuration>
+            </plugin>
 
           </plugins>
         </pluginManagement>
