@@ -24,7 +24,6 @@ import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import java.io.File;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
-import javax.annotation.Nullable;
 
 /**
  * HttpResponder is used to send response back to clients.
@@ -79,7 +78,7 @@ public interface HttpResponder {
    * @param status status of the Http response.
    * @param headers Headers to send.
    */
-  void sendStatus(HttpResponseStatus status, @Nullable Multimap<String, String> headers);
+  void sendStatus(HttpResponseStatus status, Multimap<String, String> headers);
 
   /**
    * Send a response containing raw bytes. Sets "application/octet-stream" as content type header.
@@ -88,7 +87,7 @@ public interface HttpResponder {
    * @param bytes bytes to be sent back.
    * @param headers headers to be sent back. This will overwrite any headers set by the framework.
    */
-  void sendByteArray(HttpResponseStatus status, byte[] bytes, @Nullable Multimap<String, String> headers);
+  void sendByteArray(HttpResponseStatus status, byte[] bytes, Multimap<String, String> headers);
 
   /**
    * Sends a response containing raw bytes. Default content type is "application/octet-stream", but can be
@@ -98,27 +97,38 @@ public interface HttpResponder {
    * @param buffer bytes to send
    * @param headers Headers to send.
    */
-  void sendBytes(HttpResponseStatus status, ByteBuffer buffer, @Nullable Multimap<String, String> headers);
+  void sendBytes(HttpResponseStatus status, ByteBuffer buffer, Multimap<String, String> headers);
 
   /**
    * Sends error message back to the client.
    *
    * @param status Status of the response.
    * @param errorMessage Error message sent back to the client.
-   *
-   * @deprecated Same as calling {@link #sendString(org.jboss.netty.handler.codec.http.HttpResponseStatus, String)}
    */
-  @Deprecated
   void sendError(HttpResponseStatus status, String errorMessage);
 
   /**
-   * Respond to the client saying the response will be in chunks. The response body can be sent in chunks
-   * using the {@link ChunkResponder} returned.
+   * Respond to the client saying the response will be in chunks. Add chunks to response using
+   * {@link #sendChunk(ChannelBuffer)} and {@link #sendChunkEnd}.
    *
-   * @param status  the status code to respond with
+   * @param status  the status code to respond with. Defaults to 200-OK if null.
    * @param headers additional headers to send with the response. May be null.
    */
-  ChunkResponder sendChunkStart(HttpResponseStatus status, @Nullable Multimap<String, String> headers);
+  void sendChunkStart(HttpResponseStatus status, Multimap<String, String> headers);
+
+  /**
+   * Add a chunk of data to the response. {@link #sendChunkStart(HttpResponseStatus, Multimap)}
+   * should be called before calling this method. {@link #sendChunkEnd} should be called after all chunks are done.
+   *
+   * @param content the chunk of content to send
+   */
+  void sendChunk(ChannelBuffer content);
+
+  /**
+   * Called after all chunks are done. This keeps the connection alive
+   * unless specified otherwise in the original request.
+   */
+  void sendChunkEnd();
 
   /**
    * Send response back to client.
@@ -129,14 +139,14 @@ public interface HttpResponder {
    * @param headers Headers to be sent back.
    */
   void sendContent(HttpResponseStatus status, ChannelBuffer content, String contentType,
-                   @Nullable Multimap<String, String> headers);
+                   Multimap<String, String> headers);
 
 
   /**
-   * Sends a file content back to client with response status 200.
+   * Sends a file content back to client.
    *
-   * @param file The file to send
-   * @param headers Headers to be sent back.
+   * @param file
+   * @param headers
    */
-  void sendFile(File file, @Nullable Multimap<String, String> headers);
+  void sendFile(File file, Multimap<String, String> headers);
 }

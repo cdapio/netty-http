@@ -84,11 +84,11 @@ public class InternalHttpResponderTest {
   @Test
   public void testChunks() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
-    ChunkResponder chunkResponder = responder.sendChunkStart(HttpResponseStatus.OK, null);
-    chunkResponder.sendChunk(ChannelBuffers.wrappedBuffer("a".getBytes(Charsets.UTF_8)));
-    chunkResponder.sendChunk(ChannelBuffers.wrappedBuffer("b".getBytes(Charsets.UTF_8)));
-    chunkResponder.sendChunk(ChannelBuffers.wrappedBuffer("c".getBytes(Charsets.UTF_8)));
-    chunkResponder.close();
+    responder.sendChunkStart(HttpResponseStatus.OK, HashMultimap.<String, String>create());
+    responder.sendChunk(ChannelBuffers.wrappedBuffer("a".getBytes(Charsets.UTF_8)));
+    responder.sendChunk(ChannelBuffers.wrappedBuffer("b".getBytes(Charsets.UTF_8)));
+    responder.sendChunk(ChannelBuffers.wrappedBuffer("c".getBytes(Charsets.UTF_8)));
+    responder.sendChunkEnd();
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
   }

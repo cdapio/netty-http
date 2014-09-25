@@ -275,18 +275,6 @@ public class TestHandler implements HttpHandler {
     response.sendString(HttpResponseStatus.OK, "Uploaded:" + bytesUploaded);
   }
 
-  @Path("/chunk")
-  @POST
-  public void chunk(HttpRequest request, HttpResponder responder) throws IOException {
-    // Echo the POST body of size 1 byte chunk
-    ChannelBuffer content = request.getContent();
-    ChunkResponder chunker = responder.sendChunkStart(HttpResponseStatus.OK, null);
-    while (content.readable()) {
-      chunker.sendChunk(content.readSlice(1));
-    }
-    chunker.close();
-  }
-
 
   @Path("/uexception")
   @GET

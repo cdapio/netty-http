@@ -25,7 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 
@@ -39,6 +38,7 @@ final class WrappedHttpResponder implements HttpResponder {
   private final Iterable<? extends HandlerHook> handlerHooks;
   private final HttpRequest httpRequest;
   private final HandlerInfo handlerInfo;
+  private volatile HttpResponseStatus status;
 
   public WrappedHttpResponder(HttpResponder delegate, Iterable<? extends HandlerHook> handlerHooks,
                               HttpRequest httpRequest, HandlerInfo handlerInfo) {
@@ -104,25 +104,20 @@ final class WrappedHttpResponder implements HttpResponder {
   }
 
   @Override
-  public ChunkResponder sendChunkStart(final HttpResponseStatus status, Multimap<String, String> headers) {
-    final ChunkResponder chunkResponder = delegate.sendChunkStart(status, headers);
-    return new ChunkResponder() {
-      @Override
-      public void sendChunk(ByteBuffer chunk) throws IOException {
-        chunkResponder.sendChunk(chunk);
-      }
+  public void sendChunkStart(HttpResponseStatus status, Multimap<String, String> headers) {
+    this.status = status;
+    delegate.sendChunkStart(status, headers);
+  }
 
-      @Override
-      public void sendChunk(ChannelBuffer chunk) throws IOException {
-        chunkResponder.sendChunk(chunk);
-      }
+  @Override
+  public void sendChunk(ChannelBuffer content) {
+    delegate.sendChunk(content);
+  }
 
-      @Override
-      public void close() throws IOException {
-        chunkResponder.close();
-        runHook(status);
-      }
-    };
+  @Override
+  public void sendChunkEnd() {
+    delegate.sendChunkEnd();
+    runHook(status);
   }
 
   @Override
@@ -135,7 +130,7 @@ final class WrappedHttpResponder implements HttpResponder {
   @Override
   public void sendFile(File file, Multimap<String, String> headers) {
     delegate.sendFile(file, headers);
-    runHook(HttpResponseStatus.OK);
+    runHook(status);
   }
 
   private void runHook(HttpResponseStatus status) {
