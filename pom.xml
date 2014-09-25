@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>co.cask.http</groupId>
   <artifactId>netty-http</artifactId>
-  <version>0.5.0-SNAPSHOT</version>
+  <version>0.5.0</version>
   <packaging>jar</packaging>
   <name>Netty based path router</name>
   <description>Netty based path router</description>
