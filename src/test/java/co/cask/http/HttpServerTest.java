@@ -247,7 +247,6 @@ public class HttpServerTest {
     HttpURLConnection urlConn = request("/test/v1/tweets/1", HttpMethod.PUT, true);
     writeContent(urlConn, "data");
     Assert.assertEquals(200, urlConn.getResponseCode());
-    System.out.println(urlConn.getHeaderField(HttpHeaders.Names.CONNECTION));
 
     Assert.assertEquals("keep-alive", urlConn.getHeaderField(HttpHeaders.Names.CONNECTION));
     urlConn.disconnect();
@@ -359,6 +358,18 @@ public class HttpServerTest {
   @Test
   public void testMultiMatchFooPut() throws Exception {
     testContent("/test/v1/multi-match/foo", "multi-match-put-actual-foo", HttpMethod.PUT);
+  }
+
+  @Test
+  public void testChunkResponse() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/chunk", HttpMethod.POST);
+    try {
+      writeContent(urlConn, "Testing message");
+      String response = getContent(urlConn);
+      Assert.assertEquals("Testing message", response);
+    } finally {
+      urlConn.disconnect();
+    }
   }
 
   protected void testContent(String path, String content) throws IOException {
