@@ -18,6 +18,11 @@ package co.cask.http;
 
 import com.google.common.base.Throwables;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.security.KeyStore;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 
 /**
@@ -29,14 +34,36 @@ public class SSLClientContext {
   private String protocol = "TLS";
 
   public SSLClientContext() throws Exception {
+    this(null, null);
+  }
+
+  public SSLClientContext(File keyStore, String keyStorePassword) {
 
     try {
+      KeyManagerFactory kmf = null;
+      if (keyStore != null && keyStorePassword != null) {
+        KeyStore ks = getKeyStore(keyStore, keyStorePassword);
+        kmf = KeyManagerFactory.getInstance("SunX509");
+        kmf.init(ks, keyStorePassword.toCharArray());
+      }
       clientContext = SSLContext.getInstance(protocol);
-      clientContext.init(null, TrustManagerFactory.getTrustManagers(), null);
+      clientContext.init(kmf == null ? null : kmf.getKeyManagers(), TrustManagerFactory.getTrustManagers(), null);
     } catch (Exception e) {
       throw Throwables.propagate(new Exception("Failed to initialize the client-side SSLContext", e));
     }
   }
+
+  private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws Exception {
+    KeyStore ks = KeyStore.getInstance("JKS");
+    InputStream inputStream = new FileInputStream(keyStore);
+    try {
+      ks.load(inputStream, keyStorePassword.toCharArray());
+    } finally {
+      inputStream.close();
+    }
+    return ks;
+  }
+
 
   public SSLContext getClientContext() {
     return clientContext;

@@ -157,7 +157,8 @@ Code Sample
     NettyHttpService service = NettyHttpService.builder()
                                .setPort(7777)
                                .addHttpHandlers(ImmutableList.of(new ApplicationHandler()))
-                               .enableSSL(new File("/path/to/keyStore.jks"), "keyStorePassword", "certificatePassowrd")
+                               .enableSSL(SSLConfig.builder(new File("/path/to/keyStore.jks", "keyStorePassword")
+                                          .setCertificatePassword("certificatePassowrd").build())
                                .build();
 ```
 

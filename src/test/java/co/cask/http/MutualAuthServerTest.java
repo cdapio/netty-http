@@ -23,27 +23,17 @@ import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.google.common.util.concurrent.Service;
 import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.handler.codec.http.HttpHeaders;
-import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import java.io.File;
-import java.io.IOException;
-import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
 import java.util.List;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLSession;
 
 /**
- * Test the HttpsServer.
+ * Test the HttpsServer with mutual authentication.
  */
-public class HttpsServerTest extends HttpServerTest {
-
-  private static SSLClientContext sslClientContext;
+public class MutualAuthServerTest extends HttpsServerTest {
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -57,16 +47,14 @@ public class HttpsServerTest extends HttpServerTest {
     File keyStore = tmpFolder.newFile();
     ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("cert.jks")),
                      Files.newOutputStreamSupplier(keyStore));
+    File trustKeyStore = tmpFolder.newFile();
+    ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("client.jks")),
+                     Files.newOutputStreamSupplier(trustKeyStore));
 
-    /* IMPORTANT
-     * Provide Certificate Configuration Here * *
-     * enableSSL(<SSLConfig>)
-     * KeyStore : SSL certificate
-     * KeyStorePassword : Key Store Password
-     * CertificatePassword : Certificate password if different from Key Store password or null
-    */
-
-    builder.enableSSL(SSLConfig.builder(keyStore, "secret").setCertificatePassword("secret")
+    String keyStorePassword = "secret";
+    String trustKeyStorePassword = "password";
+    builder.enableSSL(SSLConfig.builder(keyStore, keyStorePassword).setTrustKeyStore(trustKeyStore)
+                        .setTrustKeyStorePassword(trustKeyStorePassword)
                         .build());
 
     builder.modifyChannelPipeline(new Function<ChannelPipeline, ChannelPipeline>() {
@@ -77,7 +65,7 @@ public class HttpsServerTest extends HttpServerTest {
       }
     });
 
-    sslClientContext = new SSLClientContext();
+    setSslClientContext(new SSLClientContext(trustKeyStore, trustKeyStorePassword));
     service = builder.build();
     service.startAndWait();
     Service.State state = service.state();
@@ -85,32 +73,5 @@ public class HttpsServerTest extends HttpServerTest {
 
     int port = service.getBindAddress().getPort();
     baseURI = URI.create(String.format("https://localhost:%d", port));
-  }
-  
-  @Override
-  protected HttpURLConnection request(String path, HttpMethod method, boolean keepAlive) throws IOException {
-    URL url = baseURI.resolve(path).toURL();
-    HttpsURLConnection.setDefaultSSLSocketFactory(sslClientContext.getClientContext().getSocketFactory());
-    HostnameVerifier allHostsValid = new HostnameVerifier() {
-      public boolean verify(String hostname, SSLSession session) {
-        return true;
-      }
-    };
-
-    // Install the all-trusting host verifier
-    HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
-    HttpsURLConnection urlConn = (HttpsURLConnection) url.openConnection();
-    if (method == HttpMethod.POST || method == HttpMethod.PUT) {
-      urlConn.setDoOutput(true);
-    }
-    urlConn.setRequestMethod(method.getName());
-    if (!keepAlive) {
-      urlConn.setRequestProperty(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
-    }
-    return urlConn;
-  }
-
-  public static void setSslClientContext(SSLClientContext sslClientContext) {
-    HttpsServerTest.sslClientContext = sslClientContext;
   }
 }

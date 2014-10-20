@@ -60,7 +60,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class NettyHttpService extends AbstractIdleService {
 
-  private static final Logger LOG  = LoggerFactory.getLogger(NettyHttpService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(NettyHttpService.class);
 
   private static final int CLOSE_CHANNEL_TIMEOUT = 5;
   private final int bossThreadPoolSize;
@@ -458,7 +458,7 @@ public final class NettyHttpService extends AbstractIdleService {
      * Set RejectedExecutionHandler - rejection policy for executor.
      *
      * @param rejectedExecutionHandler rejectionExecutionHandler.
-     * @return  an instance of {@code Builder}.
+     * @return an instance of {@code Builder}.
      */
     public Builder setRejectedExecutionHandler(RejectedExecutionHandler rejectedExecutionHandler) {
       this.rejectedExecutionHandler = rejectedExecutionHandler;
@@ -496,8 +496,8 @@ public final class NettyHttpService extends AbstractIdleService {
     /**
      * Enable SSL by using the provided SSL information.
      */
-    public Builder enableSSL(File keyStore, String keyStorePassword, String certificatePassword) {
-      this.sslHandlerFactory = new SSLHandlerFactory(keyStore, keyStorePassword, certificatePassword);
+    public Builder enableSSL(SSLConfig sslConfig) {
+      this.sslHandlerFactory = new SSLHandlerFactory(sslConfig);
       return this;
     }
 
@@ -515,7 +515,7 @@ public final class NettyHttpService extends AbstractIdleService {
       return new NettyHttpService(bindAddress, bossThreadPoolSize, workerThreadPoolSize,
                                   execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, rejectedExecutionHandler,
                                   urlRewriter, handlers, handlerHooks, httpChunkLimit, pipelineModifier,
-                                    sslHandlerFactory);
+                                  sslHandlerFactory);
     }
   }
 }
