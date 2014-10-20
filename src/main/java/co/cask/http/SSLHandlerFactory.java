@@ -53,7 +53,7 @@ public class SSLHandlerFactory {
       KeyStore ks = getKeyStore(sslConfig.getKeyStore(), sslConfig.getKeyStorePassword());
       // Set up key manager factory to use our key store
       KeyManagerFactory kmf = KeyManagerFactory.getInstance(algorithm);
-      kmf.init(ks, (sslConfig.getCertificatePassword() != null) ? sslConfig.getCertificatePassword().toCharArray()
+      kmf.init(ks, sslConfig.getCertificatePassword() != null ? sslConfig.getCertificatePassword().toCharArray()
         : sslConfig.getKeyStorePassword().toCharArray());
       TrustManagerFactory tmf = null;
       if (sslConfig.getTrustKeyStore() != null) {
