@@ -17,12 +17,19 @@
 package co.cask.http;
 
 import org.jboss.netty.handler.ssl.SslHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.Security;
+import java.security.cert.CertificateException;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -32,6 +39,8 @@ import javax.net.ssl.TrustManagerFactory;
  * A class that encapsulates SSL Certificate Information.
  */
 public class SSLHandlerFactory {
+  private static final Logger LOG = LoggerFactory.getLogger(SSLHandlerFactory.class);
+
   private static final String protocol = "TLS";
   private final SSLContext serverContext;
   private boolean needClientAuth;
@@ -73,13 +82,31 @@ public class SSLHandlerFactory {
     }
   }
 
-  private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws Exception {
-    KeyStore ks = KeyStore.getInstance("JKS");
-    InputStream inputStream = new FileInputStream(keyStore);
+  private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws KeyStoreLoadException {
+    InputStream inputStream = null;
+    KeyStore ks = null;
     try {
+      ks = KeyStore.getInstance("JKS");
+      inputStream = new FileInputStream(keyStore);
       ks.load(inputStream, keyStorePassword.toCharArray());
+    } catch (FileNotFoundException e) {
+      throw new KeyStoreLoadException(e);
+    } catch (CertificateException e) {
+      throw new KeyStoreLoadException(e);
+    } catch (NoSuchAlgorithmException e) {
+      throw new KeyStoreLoadException(e);
+    } catch (KeyStoreException e) {
+      throw new KeyStoreLoadException(e);
+    } catch (IOException e) {
+      throw new KeyStoreLoadException(e);
     } finally {
-      inputStream.close();
+      if (inputStream != null) {
+        try {
+          inputStream.close();
+        } catch (IOException e) {
+          LOG.error("Failed to close an input stream: {}", e);
+        }
+      }
     }
     return ks;
   }
