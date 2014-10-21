@@ -158,7 +158,7 @@ Code Sample
                                .setPort(7777)
                                .addHttpHandlers(ImmutableList.of(new ApplicationHandler()))
                                .enableSSL(SSLConfig.builder(new File("/path/to/keyStore.jks", "keyStorePassword")
-                                          .setCertificatePassword("certificatePassowrd").build())
+                                          .setCertificatePassword("certificatePassword").build())
                                .build();
 ```
 
@@ -178,7 +178,7 @@ Are you interested in making netty-http better? Our development model is a simpl
  * Fork netty-http into your own GitHub repository
  * Create a topic branch with an appropriate name
  * Work on your favorite feature to your content
- * Once you are satisifed, create a pull request by going to the caskdata/netty-http project.
+ * Once you are satisfied, create a pull request by going to the caskdata/netty-http project.
  * Address all the review comments
  * Once addressed, the changes will be committed to the caskdata/netty-http repo.
 
