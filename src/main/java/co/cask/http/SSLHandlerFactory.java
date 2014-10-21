@@ -21,7 +21,6 @@ import org.jboss.netty.handler.ssl.SslHandler;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyStore;
@@ -71,21 +70,17 @@ public class SSLHandlerFactory {
 
   private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws IOException {
     KeyStore ks = null;
+    InputStream is = new FileInputStream(keyStore);
     try {
-      InputStream is = new FileInputStream(keyStore);
-      try {
-        ks = KeyStore.getInstance("JKS");
-        ks.load(is, keyStorePassword.toCharArray());
-      } catch (Exception ex) {
-        if (ex instanceof RuntimeException) {
-          throw ((RuntimeException) ex);
-        }
-        throw new IOException(ex);
-      } finally {
-        Closeables.closeQuietly(is);
+      ks = KeyStore.getInstance("JKS");
+      ks.load(is, keyStorePassword.toCharArray());
+    } catch (Exception ex) {
+      if (ex instanceof RuntimeException) {
+        throw ((RuntimeException) ex);
       }
-    } catch (FileNotFoundException e) {
-      throw new IOException(e);
+      throw new IOException(ex);
+    } finally {
+      Closeables.closeQuietly(is);
     }
     return ks;
   }
