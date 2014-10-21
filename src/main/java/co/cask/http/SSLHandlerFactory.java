@@ -16,59 +16,81 @@
 
 package co.cask.http;
 
+import com.google.common.io.Closeables;
 import org.jboss.netty.handler.ssl.SslHandler;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.Security;
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * A class that encapsulates SSL Certificate Information.
  */
-class SSLHandlerFactory {
+public class SSLHandlerFactory {
+
   private static final String protocol = "TLS";
   private final SSLContext serverContext;
+  private boolean needClientAuth;
 
-  public SSLHandlerFactory(File keyStore, String keyStorePassword, String certificatePassword) {
-    if (keyStore == null) {
-      throw new IllegalArgumentException("Certificate Path Not Configured");
-    }
-    if (keyStorePassword == null) {
-      throw new IllegalArgumentException("KeyStore Password Not Configured");
-    }
-
+  public SSLHandlerFactory(SSLConfig sslConfig) {
     String algorithm = Security.getProperty("ssl.KeyManagerFactory.algorithm");
     if (algorithm == null) {
       algorithm = "SunX509";
     }
-
     try {
-      KeyStore ks = KeyStore.getInstance("JKS");
-      InputStream inputStream = new FileInputStream(keyStore);
-      try {
-        ks.load(inputStream, keyStorePassword.toCharArray());
-      } finally {
-        inputStream.close();
-      }
+      KeyStore ks = getKeyStore(sslConfig.getKeyStore(), sslConfig.getKeyStorePassword());
       // Set up key manager factory to use our key store
       KeyManagerFactory kmf = KeyManagerFactory.getInstance(algorithm);
-      kmf.init(ks, (certificatePassword != null) ? certificatePassword.toCharArray() : keyStorePassword.toCharArray());
-
-      // Initialize the SSLContext to work with our key managers.
+      kmf.init(ks, sslConfig.getCertificatePassword() != null ? sslConfig.getCertificatePassword().toCharArray()
+        : sslConfig.getKeyStorePassword().toCharArray());
+      KeyManager[] keyManagers = kmf.getKeyManagers();
+      TrustManager[] trustManagers = null;
+      if (sslConfig.getTrustKeyStore() != null) {
+        this.needClientAuth = true;
+        KeyStore tks = getKeyStore(sslConfig.getTrustKeyStore(), sslConfig.getTrustKeyStorePassword());
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(algorithm);
+        tmf.init(tks);
+        trustManagers = tmf.getTrustManagers();
+      }
       serverContext = SSLContext.getInstance(protocol);
-      serverContext.init(kmf.getKeyManagers(), null, null);
+      serverContext.init(keyManagers, trustManagers, null);
     } catch (Exception e) {
       throw new IllegalArgumentException("Failed to initialize the server-side SSLContext", e);
     }
   }
 
+  private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws IOException {
+    KeyStore ks = null;
+    InputStream is = new FileInputStream(keyStore);
+    try {
+      ks = KeyStore.getInstance("JKS");
+      ks.load(is, keyStorePassword.toCharArray());
+    } catch (Exception ex) {
+      if (ex instanceof RuntimeException) {
+        throw ((RuntimeException) ex);
+      }
+      throw new IOException(ex);
+    } finally {
+      Closeables.closeQuietly(is);
+    }
+    return ks;
+  }
+
+  /**
+   * @return instance of {@code SslHandler}
+   */
   public SslHandler create() {
     SSLEngine engine = serverContext.createSSLEngine();
+    engine.setNeedClientAuth(needClientAuth);
     engine.setUseClientMode(false);
     return new SslHandler(engine);
   }
