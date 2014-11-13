@@ -323,8 +323,8 @@ public final class NettyHttpService extends AbstractIdleService {
     private SSLHandlerFactory sslHandlerFactory;
     private Function<ChannelPipeline, ChannelPipeline> pipelineModifier;
 
-    //Private constructor to prevent instantiating Builder instance directly.
-    private Builder() {
+    // Protected constructor to prevent instantiating Builder instance directly.
+    protected Builder() {
       bossThreadPoolSize = DEFAULT_BOSS_THREAD_POOL_SIZE;
       workerThreadPoolSize = DEFAULT_WORKER_THREAD_POOL_SIZE;
       execThreadPoolSize = DEFAULT_EXEC_HANDLER_THREAD_POOL_SIZE;
