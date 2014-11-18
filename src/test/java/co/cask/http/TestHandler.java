@@ -132,15 +132,6 @@ public class TestHandler implements HttpHandler {
     responder.sendJson(HttpResponseStatus.OK, object);
   }
 
-  @Path("/NotRoutable/{userId}/message/{messageId}")
-  @GET
-  public void notRoutableMissingParameter(HttpRequest request, HttpResponder responder,
-                                          @PathParam("userId") String userId, String messageId) {
-    JsonObject object = new JsonObject();
-    object.addProperty("result", String.format("Handled Not routable path %s ", userId));
-    responder.sendJson(HttpResponseStatus.OK, object);
-  }
-
   @Path("/exception")
   @GET
   public void exception(HttpRequest request, HttpResponder responder) {
@@ -216,7 +207,7 @@ public class TestHandler implements HttpHandler {
   @Path("/stream/upload")
   @PUT
   public BodyConsumer streamUpload(HttpRequest request, HttpResponder responder) {
-    final int fileSize = 200 * 1024 * 1024;
+    final int fileSize = 30 * 1024 * 1024;
     return new BodyConsumer() {
       ByteBuffer offHeapBuffer = ByteBuffer.allocateDirect(fileSize);
 
@@ -242,7 +233,7 @@ public class TestHandler implements HttpHandler {
   @Path("/stream/upload/fail")
   @PUT
   public BodyConsumer streamUploadFailure(HttpRequest request, HttpResponder responder)  {
-    final int fileSize = 200 * 1024 * 1024;
+    final int fileSize = 30 * 1024 * 1024;
 
     return new BodyConsumer() {
       int count = 0;

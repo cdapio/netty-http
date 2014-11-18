@@ -117,7 +117,7 @@ public class HttpServerTest {
 
   @Test
   public void testLargeFileUpload() throws IOException {
-    testStreamUpload(100 * 1024 * 1024);
+    testStreamUpload(30 * 1024 * 1024);
   }
 
 
@@ -282,13 +282,6 @@ public class HttpServerTest {
   @Test
   public void testNotRoutablePathParamMismatch() throws IOException {
     HttpURLConnection urlConn = request("/test/v1/NotRoutable/sree", HttpMethod.GET);
-    Assert.assertEquals(500, urlConn.getResponseCode());
-    urlConn.disconnect();
-  }
-
-  @Test
-  public void testNotRoutableMissingPathParam() throws IOException {
-    HttpURLConnection urlConn = request("/test/v1/NotRoutable/sree/message/12", HttpMethod.GET);
     Assert.assertEquals(500, urlConn.getResponseCode());
     urlConn.disconnect();
   }
