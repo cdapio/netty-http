@@ -17,6 +17,7 @@
 package co.cask.http;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.gson.JsonObject;
@@ -27,12 +28,16 @@ import org.junit.Assert;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.SortedSet;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
+import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
+import javax.ws.rs.QueryParam;
 
 /**
  * Test handler.
@@ -283,6 +288,33 @@ public class TestHandler implements HttpHandler {
   @GET
   public void testException(HttpRequest request, HttpResponder responder) {
     throw Throwables.propagate(new RuntimeException("User Exception"));
+  }
+
+  @Path("/stringQueryParam/{path}")
+  @GET
+  public void testStringQueryParam(HttpRequest request, HttpResponder responder,
+                                   @PathParam("path") String path, @QueryParam("name") String name) {
+    responder.sendString(HttpResponseStatus.OK, path + ":" + name);
+  }
+
+  @Path("/primitiveQueryParam")
+  @GET
+  public void testPrimitiveQueryParam(HttpRequest request, HttpResponder responder, @QueryParam("age") int age) {
+    responder.sendString(HttpResponseStatus.OK, Integer.toString(age));
+  }
+
+  @Path("/sortedSetQueryParam")
+  @GET
+  public void testSortedSetQueryParam(HttpRequest request, HttpResponder responder,
+                                      @QueryParam("id") SortedSet<Integer> ids) {
+    responder.sendString(HttpResponseStatus.OK, Joiner.on(',').join(ids));
+  }
+
+  @Path("/listHeaderParam")
+  @GET
+  public void testListHeaderParam(HttpRequest request, HttpResponder responder,
+                                  @HeaderParam("name") List<String> names) {
+    responder.sendString(HttpResponseStatus.OK, Joiner.on(',').join(names));
   }
 
   @Override

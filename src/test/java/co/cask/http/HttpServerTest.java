@@ -18,6 +18,8 @@ package co.cask.http;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
@@ -363,6 +365,38 @@ public class HttpServerTest {
     } finally {
       urlConn.disconnect();
     }
+  }
+
+  @Test
+  public void testStringQueryParam() throws IOException {
+    testContent("/test/v1/stringQueryParam/mypath?name=netty", "mypath:netty", HttpMethod.GET);
+  }
+
+  @Test
+  public void testPrimitiveQueryParam() throws IOException {
+    testContent("/test/v1/primitiveQueryParam?age=20", "20", HttpMethod.GET);
+  }
+
+  @Test
+  public void testSortedSetQueryParam() throws IOException {
+    // Try different way of passing the ids, they should end up de-dup and sorted.
+    testContent("/test/v1/sortedSetQueryParam?id=30&id=10&id=20&id=30", "10,20,30", HttpMethod.GET);
+    testContent("/test/v1/sortedSetQueryParam?id=10&id=30&id=20&id=20", "10,20,30", HttpMethod.GET);
+    testContent("/test/v1/sortedSetQueryParam?id=20&id=30&id=20&id=10", "10,20,30", HttpMethod.GET);
+  }
+
+  @Test
+  public void testListHeaderParam() throws IOException {
+    List<String> names = ImmutableList.of("name1", "name3", "name2", "name1");
+
+    HttpURLConnection urlConn = request("/test/v1/listHeaderParam", HttpMethod.GET);
+    for (String name : names) {
+      urlConn.addRequestProperty("name", name);
+    }
+
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals(Joiner.on(',').join(names), getContent(urlConn));
+    urlConn.disconnect();
   }
 
   protected void testContent(String path, String content) throws IOException {
