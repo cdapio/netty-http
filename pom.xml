@@ -43,9 +43,9 @@
   </developers>
 
   <scm>
-    <connection>scm:git@github.com:caskdata/netty-http.git</connection>
+    <connection>scm:git:git@github.com:caskdata/netty-http.git</connection>
     <url>scm:git:git://github.com/caskdata/netty-http.git</url>
-    <developerConnection>scm:git:git://github.com/caskdata/netty-http.git</developerConnection>
+    <developerConnection>scm:git:git@github.com:caskdata/netty-http.git</developerConnection>
   </scm>
 
   <distributionManagement>
