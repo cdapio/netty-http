@@ -20,6 +20,8 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.common.reflect.TypeToken;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.handler.codec.http.HttpRequest;
@@ -31,6 +33,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.SortedSet;
 import javax.ws.rs.DELETE;
+import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
@@ -45,6 +48,8 @@ import javax.ws.rs.QueryParam;
 @SuppressWarnings("UnusedParameters")
 @Path("/test/v1")
 public class TestHandler implements HttpHandler {
+
+  private static final Gson GSON = new Gson();
 
   @Path("resource")
   @GET
@@ -315,6 +320,20 @@ public class TestHandler implements HttpHandler {
   public void testListHeaderParam(HttpRequest request, HttpResponder responder,
                                   @HeaderParam("name") List<String> names) {
     responder.sendString(HttpResponseStatus.OK, Joiner.on(',').join(names));
+  }
+
+  @Path("/defaultValue")
+  @GET
+  public void testDefaultValue(HttpRequest request, HttpResponder responder,
+                               @DefaultValue("30") @QueryParam("age") Integer age,
+                               @DefaultValue("hello") @QueryParam("name") String name,
+                               @DefaultValue("casking") @HeaderParam("hobby") List<String> hobbies) {
+    JsonObject response = new JsonObject();
+    response.addProperty("age", age);
+    response.addProperty("name", name);
+    response.add("hobby", GSON.toJsonTree(hobbies, new TypeToken<List<String>>() { }.getType()));
+
+    responder.sendJson(HttpResponseStatus.OK, response);
   }
 
   @Override

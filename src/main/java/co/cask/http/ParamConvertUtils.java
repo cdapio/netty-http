@@ -16,6 +16,7 @@
 
 package co.cask.http;
 
+import com.google.common.base.Defaults;
 import com.google.common.base.Function;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableCollection;
@@ -108,11 +109,12 @@ public final class ParamConvertUtils {
   private static Function<List<String>, Object> createListConverter(Type resultType) {
     TypeToken<?> typeToken = TypeToken.of(resultType);
 
-    Class<?> resultClass = Primitives.wrap(typeToken.getRawType());
+    // Use boxed type if raw type is primitive type. Otherwise the type won't change.
+    Class<?> resultClass = typeToken.getRawType();
 
     // For string, just return the first value
     if (resultClass == String.class) {
-      return new BasicConverter() {
+      return new BasicConverter(Defaults.defaultValue(resultClass)) {
         @Override
         protected Object convert(String value) throws Exception {
           return value;
@@ -146,7 +148,7 @@ public final class ParamConvertUtils {
       return converter;
     }
 
-    throw new IllegalArgumentException("Unsupported type " + resultType);
+    throw new IllegalArgumentException("Unsupported type " + typeToken);
   }
 
 
@@ -155,23 +157,28 @@ public final class ParamConvertUtils {
    *
    * @return A converter function or {@code null} if the given type is not primitive type
    */
-  private static Function<List<String>, Object> createPrimitiveTypeConverter(final Class<?> resultClass) {
-    if (!Primitives.isWrapperType(resultClass)) {
+  private static Function<List<String>, Object> createPrimitiveTypeConverter(Class<?> resultClass) {
+    Object defaultValue = Defaults.defaultValue(resultClass);
+    final Class<?> boxedType = Primitives.wrap(resultClass);
+
+    if (!Primitives.isWrapperType(boxedType)) {
       return null;
     }
 
-    return new BasicConverter() {
+    return new BasicConverter(defaultValue) {
       @Override
       protected Object convert(String value) throws Exception {
-        Method method = PRIMITIVES_PARSE_METHODS.get(resultClass);
+        Method method = PRIMITIVES_PARSE_METHODS.get(boxedType);
         if (method != null) {
           // It's primitive/wrapper type (except char)
           return method.invoke(null, value);
         }
         // One exception is char type
-        if (resultClass == Character.class) {
+        if (boxedType == Character.class) {
           return value.charAt(0);
         }
+
+        // Should not happen.
         return null;
       }
     };
@@ -187,7 +194,7 @@ public final class ParamConvertUtils {
   private static Function<List<String>, Object> createStringConstructorConverter(Class<?> resultClass) {
     try {
       final Constructor<?> constructor = resultClass.getConstructor(String.class);
-      return new BasicConverter() {
+      return new BasicConverter(Defaults.defaultValue(resultClass)) {
         @Override
         protected Object convert(String value) throws Exception {
           return constructor.newInstance(value);
@@ -218,7 +225,7 @@ public final class ParamConvertUtils {
     }
 
     final Method convertMethod = method;
-    return new BasicConverter() {
+    return new BasicConverter(Defaults.defaultValue(resultClass)) {
       @Override
       protected Object convert(String value) throws Exception {
         return convertMethod.invoke(null, value);
@@ -258,7 +265,12 @@ public final class ParamConvertUtils {
       return null;
     }
 
-    final Function<List<String>, Object> entryConverter = createQueryParamConverter(elementType);
+    // Get the converter for the collection element.
+    final Function<List<String>, Object> elementConverter = createQueryParamConverter(elementType);
+    if (elementConverter == null) {
+      return null;
+    }
+
     return new Function<List<String>, Object>() {
       @Override
       public Object apply(List<String> values) {
@@ -272,7 +284,7 @@ public final class ParamConvertUtils {
         }
 
         for (String value : values) {
-          add(builder, entryConverter.apply(ImmutableList.of(value)));
+          add(builder, elementConverter.apply(ImmutableList.of(value)));
         }
         return builder.build();
       }
@@ -289,16 +301,26 @@ public final class ParamConvertUtils {
    */
   private abstract static class BasicConverter implements Function<List<String>, Object> {
 
+    private final Object defaultValue;
+
+    protected BasicConverter(Object defaultValue) {
+      this.defaultValue = defaultValue;
+    }
+
     @Override
     public final Object apply(List<String> values) {
       if (values.isEmpty()) {
-        return null;
+        return getDefaultValue();
       }
       try {
         return convert(values.get(0));
       } catch (Exception e) {
         throw Throwables.propagate(e);
       }
+    }
+
+    protected Object getDefaultValue() {
+      return defaultValue;
     }
 
     protected abstract Object convert(String value) throws Exception;

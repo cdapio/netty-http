@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
+import javax.ws.rs.DefaultValue;
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.QueryParam;
@@ -119,13 +120,13 @@ public final class HttpResourceModel {
         int idx = 0;
         for (Map<Class<? extends Annotation>, ParameterInfo<?>> info : paramsInfo) {
           if (info.containsKey(PathParam.class)) {
-            args[idx] = getPathParamValue((ParameterInfo<String>) info.get(PathParam.class), groupValues);
+            args[idx] = getPathParamValue(info, groupValues);
           }
           if (info.containsKey(QueryParam.class)) {
-            args[idx] = getQueryParamValue((ParameterInfo<List<String>>) info.get(QueryParam.class), request.getUri());
+            args[idx] = getQueryParamValue(info, request.getUri());
           }
           if (info.containsKey(HeaderParam.class)) {
-            args[idx] = getHeaderParamValue((ParameterInfo<List<String>>) info.get(HeaderParam.class), request);
+            args[idx] = getHeaderParamValue(info, request);
           }
           idx++;
         }
@@ -152,25 +153,50 @@ public final class HttpResourceModel {
       .toString();
   }
 
-  private Object getPathParamValue(ParameterInfo<String> info, Map<String, String> groupValues) {
+  @SuppressWarnings("unchecked")
+  private Object getPathParamValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations,
+                                   Map<String, String> groupValues) {
+    ParameterInfo<String> info = (ParameterInfo<String>) annotations.get(PathParam.class);
     PathParam pathParam = info.getAnnotation();
     String value = groupValues.get(pathParam.value());
     Preconditions.checkArgument(value != null, "Could not resolve value for parameter %s", pathParam.value());
     return info.convert(value);
   }
 
-  private Object getQueryParamValue(ParameterInfo<List<String>> info, String uri) {
+  @SuppressWarnings("unchecked")
+  private Object getQueryParamValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations, String uri) {
+    ParameterInfo<List<String>> info = (ParameterInfo<List<String>>) annotations.get(QueryParam.class);
     QueryParam queryParam = info.getAnnotation();
     List<String> values = new QueryStringDecoder(uri).getParameters().get(queryParam.value());
-    if (values == null) {
-      values = ImmutableList.of();
-    }
-    return info.convert(values);
+
+    return (values == null) ? info.convert(defaultValue(annotations)) : info.convert(values);
   }
 
-  private Object getHeaderParamValue(ParameterInfo<List<String>> info, HttpRequest request) {
+  @SuppressWarnings("unchecked")
+  private Object getHeaderParamValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations,
+                                     HttpRequest request) {
+    ParameterInfo<List<String>> info = (ParameterInfo<List<String>>) annotations.get(HeaderParam.class);
     HeaderParam headerParam = info.getAnnotation();
-    return info.convert(request.getHeaders(headerParam.value()));
+    String headerName = headerParam.value();
+    List<String> headers = request.getHeaders(headerParam.value());
+
+    return (request.containsHeader(headerName)) ? info.convert(headers) : info.convert(defaultValue(annotations));
+  }
+
+  /**
+   * Returns a List of String created based on the {@link DefaultValue} if it is presented in the annotations Map.
+   *
+   * @return a List of String or an empty List if {@link DefaultValue} is not presented
+   */
+  private List<String> defaultValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations) {
+    List<String> values = ImmutableList.of();
+
+    ParameterInfo<?> defaultInfo = annotations.get(DefaultValue.class);
+    if (defaultInfo != null) {
+      DefaultValue defaultValue = defaultInfo.getAnnotation();
+      values = ImmutableList.of(defaultValue.value());
+    }
+    return values;
   }
 
   /**
@@ -191,7 +217,7 @@ public final class HttpResourceModel {
 
       for (Annotation annotation : annotations) {
         Class<? extends Annotation> annotationType = annotation.annotationType();
-        ParameterInfo<?> parameterInfo = null;
+        ParameterInfo<?> parameterInfo;
 
         if (PathParam.class.isAssignableFrom(annotationType)) {
           parameterInfo = ParameterInfo.create(annotation,
@@ -202,14 +228,17 @@ public final class HttpResourceModel {
         } else if (HeaderParam.class.isAssignableFrom(annotationType)) {
           parameterInfo = ParameterInfo.create(annotation,
                                                ParamConvertUtils.createHeaderParamConverter(parameterTypes[i]));
+        } else {
+          parameterInfo = ParameterInfo.create(annotation, null);
         }
+
         paramAnnotations.put(annotationType, parameterInfo);
       }
 
       // Must have either @PathParam, @QueryParam or @HeaderParam, but not two or more.
       if (Sets.intersection(SUPPORTED_PARAM_ANNOTATIONS, paramAnnotations.keySet()).size() != 1) {
         throw new IllegalArgumentException(
-          String.format("Missing have exactly one annotation from %s for parameter %d in method %s",
+          String.format("Must have exactly one annotation from %s for parameter %d in method %s",
                         SUPPORTED_PARAM_ANNOTATIONS, i, method));
       }
 
