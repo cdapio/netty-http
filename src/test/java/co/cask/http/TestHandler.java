@@ -17,8 +17,11 @@
 package co.cask.http;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.common.reflect.TypeToken;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.handler.codec.http.HttpRequest;
@@ -27,12 +30,17 @@ import org.junit.Assert;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.SortedSet;
 import javax.ws.rs.DELETE;
+import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
+import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
+import javax.ws.rs.QueryParam;
 
 /**
  * Test handler.
@@ -40,6 +48,8 @@ import javax.ws.rs.PathParam;
 @SuppressWarnings("UnusedParameters")
 @Path("/test/v1")
 public class TestHandler implements HttpHandler {
+
+  private static final Gson GSON = new Gson();
 
   @Path("resource")
   @GET
@@ -132,15 +142,6 @@ public class TestHandler implements HttpHandler {
     responder.sendJson(HttpResponseStatus.OK, object);
   }
 
-  @Path("/NotRoutable/{userId}/message/{messageId}")
-  @GET
-  public void notRoutableMissingParameter(HttpRequest request, HttpResponder responder,
-                                          @PathParam("userId") String userId, String messageId) {
-    JsonObject object = new JsonObject();
-    object.addProperty("result", String.format("Handled Not routable path %s ", userId));
-    responder.sendJson(HttpResponseStatus.OK, object);
-  }
-
   @Path("/exception")
   @GET
   public void exception(HttpRequest request, HttpResponder responder) {
@@ -216,7 +217,7 @@ public class TestHandler implements HttpHandler {
   @Path("/stream/upload")
   @PUT
   public BodyConsumer streamUpload(HttpRequest request, HttpResponder responder) {
-    final int fileSize = 200 * 1024 * 1024;
+    final int fileSize = 30 * 1024 * 1024;
     return new BodyConsumer() {
       ByteBuffer offHeapBuffer = ByteBuffer.allocateDirect(fileSize);
 
@@ -242,7 +243,7 @@ public class TestHandler implements HttpHandler {
   @Path("/stream/upload/fail")
   @PUT
   public BodyConsumer streamUploadFailure(HttpRequest request, HttpResponder responder)  {
-    final int fileSize = 200 * 1024 * 1024;
+    final int fileSize = 30 * 1024 * 1024;
 
     return new BodyConsumer() {
       int count = 0;
@@ -292,6 +293,47 @@ public class TestHandler implements HttpHandler {
   @GET
   public void testException(HttpRequest request, HttpResponder responder) {
     throw Throwables.propagate(new RuntimeException("User Exception"));
+  }
+
+  @Path("/stringQueryParam/{path}")
+  @GET
+  public void testStringQueryParam(HttpRequest request, HttpResponder responder,
+                                   @PathParam("path") String path, @QueryParam("name") String name) {
+    responder.sendString(HttpResponseStatus.OK, path + ":" + name);
+  }
+
+  @Path("/primitiveQueryParam")
+  @GET
+  public void testPrimitiveQueryParam(HttpRequest request, HttpResponder responder, @QueryParam("age") int age) {
+    responder.sendString(HttpResponseStatus.OK, Integer.toString(age));
+  }
+
+  @Path("/sortedSetQueryParam")
+  @GET
+  public void testSortedSetQueryParam(HttpRequest request, HttpResponder responder,
+                                      @QueryParam("id") SortedSet<Integer> ids) {
+    responder.sendString(HttpResponseStatus.OK, Joiner.on(',').join(ids));
+  }
+
+  @Path("/listHeaderParam")
+  @GET
+  public void testListHeaderParam(HttpRequest request, HttpResponder responder,
+                                  @HeaderParam("name") List<String> names) {
+    responder.sendString(HttpResponseStatus.OK, Joiner.on(',').join(names));
+  }
+
+  @Path("/defaultValue")
+  @GET
+  public void testDefaultValue(HttpRequest request, HttpResponder responder,
+                               @DefaultValue("30") @QueryParam("age") Integer age,
+                               @DefaultValue("hello") @QueryParam("name") String name,
+                               @DefaultValue("casking") @HeaderParam("hobby") List<String> hobbies) {
+    JsonObject response = new JsonObject();
+    response.addProperty("age", age);
+    response.addProperty("name", name);
+    response.add("hobby", GSON.toJsonTree(hobbies, new TypeToken<List<String>>() { }.getType()));
+
+    responder.sendJson(HttpResponseStatus.OK, response);
   }
 
   @Override

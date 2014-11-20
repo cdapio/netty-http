@@ -18,12 +18,15 @@ package co.cask.http;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Function;
+import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.Service;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpMethod;
@@ -117,7 +120,7 @@ public class HttpServerTest {
 
   @Test
   public void testLargeFileUpload() throws IOException {
-    testStreamUpload(100 * 1024 * 1024);
+    testStreamUpload(30 * 1024 * 1024);
   }
 
 
@@ -287,13 +290,6 @@ public class HttpServerTest {
   }
 
   @Test
-  public void testNotRoutableMissingPathParam() throws IOException {
-    HttpURLConnection urlConn = request("/test/v1/NotRoutable/sree/message/12", HttpMethod.GET);
-    Assert.assertEquals(500, urlConn.getResponseCode());
-    urlConn.disconnect();
-  }
-
-  @Test
   public void testMultiMatchParamPut() throws Exception {
     HttpURLConnection urlConn = request("/test/v1/multi-match/bar", HttpMethod.PUT);
     Assert.assertEquals(405, urlConn.getResponseCode());
@@ -370,6 +366,65 @@ public class HttpServerTest {
     } finally {
       urlConn.disconnect();
     }
+  }
+
+  @Test
+  public void testStringQueryParam() throws IOException {
+    // First send without query, for String type, should get defaulted to null.
+    testContent("/test/v1/stringQueryParam/mypath", "mypath:null", HttpMethod.GET);
+
+    // Then send with query, should response with the given name.
+    testContent("/test/v1/stringQueryParam/mypath?name=netty", "mypath:netty", HttpMethod.GET);
+  }
+
+  @Test
+  public void testPrimitiveQueryParam() throws IOException {
+    // For primitive type, if missing parameter, should get defaulted to Java primitive default value.
+    testContent("/test/v1/primitiveQueryParam", "0", HttpMethod.GET);
+
+    testContent("/test/v1/primitiveQueryParam?age=20", "20", HttpMethod.GET);
+  }
+
+  @Test
+  public void testSortedSetQueryParam() throws IOException {
+    // For collection, if missing parameter, should get defaulted to empty collection
+    testContent("/test/v1/sortedSetQueryParam", "", HttpMethod.GET);
+
+    // Try different way of passing the ids, they should end up de-dup and sorted.
+    testContent("/test/v1/sortedSetQueryParam?id=30&id=10&id=20&id=30", "10,20,30", HttpMethod.GET);
+    testContent("/test/v1/sortedSetQueryParam?id=10&id=30&id=20&id=20", "10,20,30", HttpMethod.GET);
+    testContent("/test/v1/sortedSetQueryParam?id=20&id=30&id=20&id=10", "10,20,30", HttpMethod.GET);
+  }
+
+  @Test
+  public void testListHeaderParam() throws IOException {
+    List<String> names = ImmutableList.of("name1", "name3", "name2", "name1");
+
+    HttpURLConnection urlConn = request("/test/v1/listHeaderParam", HttpMethod.GET);
+    for (String name : names) {
+      urlConn.addRequestProperty("name", name);
+    }
+
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals(Joiner.on(',').join(names), getContent(urlConn));
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testDefaultQueryParam() throws IOException {
+    // Submit with no parameters. Each should get the default values.
+    HttpURLConnection urlConn = request("/test/v1/defaultValue", HttpMethod.GET);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    JsonObject json = GSON.fromJson(getContent(urlConn), JsonObject.class);
+
+    Type hobbyType = new TypeToken<List<String>>() { }.getType();
+
+    Assert.assertEquals(30, json.get("age").getAsLong());
+    Assert.assertEquals("hello", json.get("name").getAsString());
+    Assert.assertEquals(ImmutableList.of("casking"),
+                        GSON.fromJson(json.get("hobby").getAsJsonArray(), hobbyType));
+
+    urlConn.disconnect();
   }
 
   protected void testContent(String path, String content) throws IOException {
