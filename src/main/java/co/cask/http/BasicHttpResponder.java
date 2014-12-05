@@ -23,7 +23,6 @@ import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
-import org.jboss.netty.channel.ChannelFutureProgressListener;
 import org.jboss.netty.channel.DefaultFileRegion;
 import org.jboss.netty.channel.FileRegion;
 import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
@@ -73,6 +72,8 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     response.setHeader(HttpHeaders.Names.TRANSFER_ENCODING, HttpHeaders.Values.CHUNKED);
     if (keepAlive) {
       response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+    } else {
+      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
     }
     channel.write(response);
     return new ChannelChunkResponder(channel, keepAlive);
@@ -94,6 +95,8 @@ public class BasicHttpResponder extends AbstractHttpResponder {
 
     if (keepAlive) {
       response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+    } else {
+      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
     }
 
     // Add headers, note will override all headers set by the framework
@@ -104,7 +107,7 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     }
 
     ChannelFuture future = channel.write(response);
-    if (!keepAlive || status.getCode() >= 400) {
+    if (!keepAlive) {
       future.addListener(ChannelFutureListener.CLOSE);
     }
   }
@@ -118,6 +121,8 @@ public class BasicHttpResponder extends AbstractHttpResponder {
 
     if (keepAlive) {
       response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+    } else {
+      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
     }
 
     // Add headers, note will override all headers set by the framework
@@ -138,21 +143,15 @@ public class BasicHttpResponder extends AbstractHttpResponder {
 
       final FileRegion region = new DefaultFileRegion(fc, 0, file.length());
       writeFuture = channel.write(region);
-      writeFuture.addListener(new ChannelFutureProgressListener() {
-        public void operationComplete(ChannelFuture future) {
+      writeFuture.addListener(new ChannelFutureListener() {
+        @Override
+        public void operationComplete(ChannelFuture future) throws Exception {
           region.releaseExternalResources();
           if (!keepAlive) {
             channel.close();
           }
         }
-
-        @Override
-        public void operationProgressed(ChannelFuture future, long amount,
-                                        long current, long total) throws Exception {
-          // no-op
-        }
       });
-
     } catch (IOException e) {
       throw Throwables.propagate(e);
     }
