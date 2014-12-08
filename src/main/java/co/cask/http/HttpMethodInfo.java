@@ -16,10 +16,13 @@
 
 package co.cask.http;
 
-import com.google.common.base.Preconditions;
+import com.google.common.base.Objects;
+import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableMultimap;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.handler.codec.http.HttpChunk;
+import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 
@@ -65,7 +68,7 @@ class HttpMethodInfo {
     if (isStreaming) {
       // Casting guarantee to be succeeded.
       bodyConsumer = (BodyConsumer) method.invoke(handler, args);
-      if (requestContent.readable()) {
+      if (bodyConsumer != null && requestContent.readable()) {
         try {
           bodyConsumer.chunk(requestContent, responder);
         } catch (Throwable t) {
@@ -74,7 +77,7 @@ class HttpMethodInfo {
           throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR, "", t);
         }
       }
-      if (!isChunkedRequest) {
+      if (bodyConsumer != null && !isChunkedRequest) {
         bodyConsumer.finished(responder);
         bodyConsumer = null;
       }
@@ -86,7 +89,14 @@ class HttpMethodInfo {
   }
 
   void chunk(HttpChunk chunk) throws Exception {
-    Preconditions.checkState(bodyConsumer != null, "Received chunked content without BodyConsumer.");
+    if (bodyConsumer == null) {
+      // If the handler method doesn't want to handle chunk request, the bodyConsumer will be null.
+      // It applies to case when the handler method inspects the request and decides to decline it.
+      // Usually the handler also closes the connection after declining the request.
+      // However, depending on the closing time and the request,
+      // there may be some chunk of data already sent by the client.
+      return;
+    }
     if (chunk.isLast()) {
       bodyConsumer.finished(responder);
       bodyConsumer = null;
@@ -105,12 +115,17 @@ class HttpMethodInfo {
    * Sends the error to responder.
    */
   void sendError(HttpResponseStatus status, Throwable ex) {
+    String msg;
+
     if (ex instanceof InvocationTargetException) {
-      responder.sendError(status, String.format("Exception Encountered while processing request : %s",
-                                                ((InvocationTargetException) ex).getTargetException().getMessage()));
+      msg = String.format("Exception Encountered while processing request : %s",
+                          Objects.firstNonNull(ex.getCause(), ex).getMessage());
     } else {
-      responder.sendError(status, String.format("Exception Encountered while processing request: %s", ex.getMessage()));
+      msg = String.format("Exception Encountered while processing request: %s", ex.getMessage());
     }
+
+    // Send the status and message, followed by closing of the connection.
+    responder.sendString(status, msg, ImmutableMultimap.of(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE));
   }
 
   /**

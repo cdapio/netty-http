@@ -62,21 +62,14 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     Preconditions.checkArgument((status.getCode() >= 200 && status.getCode() < 210) , "Http Chunk Failure");
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
 
-    if (headers != null) {
-      for (Map.Entry<String, Collection<String>> entry : headers.asMap().entrySet()) {
-        response.setHeader(entry.getKey(), entry.getValue());
-      }
-    }
+    setCustomHeaders(response, headers);
 
     response.setChunked(true);
     response.setHeader(HttpHeaders.Names.TRANSFER_ENCODING, HttpHeaders.Values.CHUNKED);
-    if (keepAlive) {
-      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
-    } else {
-      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
-    }
+
+    boolean responseKeepAlive = setResponseKeepAlive(response);
     channel.write(response);
-    return new ChannelChunkResponder(channel, keepAlive);
+    return new ChannelChunkResponder(channel, responseKeepAlive);
   }
 
   @Override
@@ -84,6 +77,8 @@ public class BasicHttpResponder extends AbstractHttpResponder {
                           @Nullable Multimap<String, String> headers) {
     Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+
+    setCustomHeaders(response, headers);
 
     if (content != null) {
       response.setContent(content);
@@ -93,21 +88,9 @@ public class BasicHttpResponder extends AbstractHttpResponder {
       response.setHeader(HttpHeaders.Names.CONTENT_LENGTH, 0);
     }
 
-    if (keepAlive) {
-      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
-    } else {
-      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
-    }
-
-    // Add headers, note will override all headers set by the framework
-    if (headers != null) {
-      for (Map.Entry<String, Collection<String>> entry : headers.asMap().entrySet()) {
-        response.setHeader(entry.getKey(), entry.getValue());
-      }
-    }
-
+    boolean responseKeepAlive = setResponseKeepAlive(response);
     ChannelFuture future = channel.write(response);
-    if (!keepAlive) {
+    if (!responseKeepAlive) {
       future.addListener(ChannelFutureListener.CLOSE);
     }
   }
@@ -117,20 +100,10 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 
+    setCustomHeaders(response, headers);
     response.setHeader(HttpHeaders.Names.CONTENT_LENGTH, file.length());
 
-    if (keepAlive) {
-      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
-    } else {
-      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
-    }
-
-    // Add headers, note will override all headers set by the framework
-    if (headers != null) {
-      for (Map.Entry<String, Collection<String>> entry : headers.asMap().entrySet()) {
-        response.setHeader(entry.getKey(), entry.getValue());
-      }
-    }
+    final boolean responseKeepAlive = setResponseKeepAlive(response);
 
     // Write the initial line and the header.
     channel.write(response);
@@ -147,7 +120,7 @@ public class BasicHttpResponder extends AbstractHttpResponder {
         @Override
         public void operationComplete(ChannelFuture future) throws Exception {
           region.releaseExternalResources();
-          if (!keepAlive) {
+          if (!responseKeepAlive) {
             channel.close();
           }
         }
@@ -155,5 +128,27 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     } catch (IOException e) {
       throw Throwables.propagate(e);
     }
+  }
+
+  private void setCustomHeaders(HttpResponse response, @Nullable Multimap<String, String> headers) {
+    // Add headers. They will override all headers set by the framework
+    if (headers != null) {
+      for (Map.Entry<String, Collection<String>> entry : headers.asMap().entrySet()) {
+        response.setHeader(entry.getKey(), entry.getValue());
+      }
+    }
+  }
+
+  private boolean setResponseKeepAlive(HttpResponse response) {
+    boolean closeConn = HttpHeaders.Values.CLOSE.equalsIgnoreCase(response.getHeader(HttpHeaders.Names.CONNECTION));
+    boolean responseKeepAlive = this.keepAlive && !closeConn;
+
+    if (responseKeepAlive) {
+      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.KEEP_ALIVE);
+    } else {
+      response.setHeader(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
+    }
+
+    return responseKeepAlive;
   }
 }

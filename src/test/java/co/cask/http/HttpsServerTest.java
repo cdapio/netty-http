@@ -31,12 +31,15 @@ import org.junit.BeforeClass;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
 import java.util.List;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 /**
  * Test the HttpsServer.
@@ -108,6 +111,11 @@ public class HttpsServerTest extends HttpServerTest {
       urlConn.setRequestProperty(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
     }
     return urlConn;
+  }
+
+  @Override
+  protected Socket createRawSocket(URL url) throws IOException {
+    return sslClientContext.getClientContext().getSocketFactory().createSocket(url.getHost(), url.getPort());
   }
 
   public static void setSslClientContext(SSLClientContext sslClientContext) {

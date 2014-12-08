@@ -20,6 +20,7 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableMultimap;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -334,6 +335,19 @@ public class TestHandler implements HttpHandler {
     response.add("hobby", GSON.toJsonTree(hobbies, new TypeToken<List<String>>() { }.getType()));
 
     responder.sendJson(HttpResponseStatus.OK, response);
+  }
+
+  @Path("/connectionClose")
+  @GET
+  public void testConnectionClose(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "Close connection", ImmutableMultimap.of("Connection", "close"));
+  }
+
+  @Path("/uploadReject")
+  @POST
+  public BodyConsumer testUploadReject(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.BAD_REQUEST, "Rejected", ImmutableMultimap.of("Connection", "close"));
+    return null;
   }
 
   @Override
