@@ -28,6 +28,7 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
+import javax.annotation.Nullable;
 
 /**
  * Wrap HttpResponder to call post handler hook.
@@ -70,6 +71,12 @@ final class WrappedHttpResponder implements HttpResponder {
   @Override
   public void sendString(HttpResponseStatus status, String data) {
     delegate.sendString(status, data);
+    runHook(status);
+  }
+
+  @Override
+  public void sendString(HttpResponseStatus status, String data, @Nullable Multimap<String, String> headers) {
+    delegate.sendString(status, data, headers);
     runHook(status);
   }
 

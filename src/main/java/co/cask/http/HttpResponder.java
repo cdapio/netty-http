@@ -67,6 +67,15 @@ public interface HttpResponder {
   void sendString(HttpResponseStatus status, String data);
 
   /**
+   * Send a string response back to the http client.
+   *
+   * @param status status of the Http response.
+   * @param data string data to be sent back.
+   * @param headers Headers to send.
+   */
+  void sendString(HttpResponseStatus status, String data, @Nullable Multimap<String, String> headers);
+
+  /**
    * Send only a status code back to client without any content.
    *
    * @param status status of the Http response.

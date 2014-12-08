@@ -70,13 +70,18 @@ public abstract class AbstractHttpResponder implements HttpResponder {
 
   @Override
   public void sendString(HttpResponseStatus status, String data) {
+    sendString(status, data, null);
+  }
+
+  @Override
+  public void sendString(HttpResponseStatus status, String data, @Nullable Multimap<String, String> headers) {
     if (data == null) {
-      sendStatus(status);
+      sendStatus(status, headers);
       return;
     }
     try {
       ChannelBuffer channelBuffer = ChannelBuffers.wrappedBuffer(Charsets.UTF_8.encode(data));
-      sendContent(status, channelBuffer, "text/plain; charset=utf-8", ImmutableMultimap.<String, String>of());
+      sendContent(status, channelBuffer, "text/plain; charset=utf-8", headers);
     } catch (Exception e) {
       throw Throwables.propagate(e);
     }

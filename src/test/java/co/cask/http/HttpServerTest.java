@@ -22,6 +22,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
+import com.google.common.io.CharStreams;
 import com.google.common.io.Files;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.Service;
@@ -30,6 +31,7 @@ import com.google.gson.JsonObject;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpMethod;
+import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -39,9 +41,12 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
 import java.util.List;
@@ -425,6 +430,45 @@ public class HttpServerTest {
                         GSON.fromJson(json.get("hobby").getAsJsonArray(), hobbyType));
 
     urlConn.disconnect();
+  }
+
+  @Test (timeout = 5000)
+  public void testConnectionClose() throws Exception {
+    URL url = baseURI.resolve("/test/v1/connectionClose").toURL();
+
+    // Fire http request using raw socket so that we can verify the connection get closed by the server
+    // after the response.
+    Socket socket = createRawSocket(url);
+    try {
+      PrintStream printer = new PrintStream(socket.getOutputStream(), false, "UTF-8");
+      printer.printf("GET %s HTTP/1.1\r\n", url.getPath());
+      printer.printf("Host: %s:%d\r\n", url.getHost(), url.getPort());
+      printer.print("\r\n");
+      printer.flush();
+
+      // Just read everything from the response. Since the server will close the connection, the read loop should
+      // end with an EOF. Otherwise there will be timeout of this test case
+      String response = CharStreams.toString(new InputStreamReader(socket.getInputStream(), Charsets.UTF_8));
+      Assert.assertTrue(response.startsWith("HTTP/1.1 200 OK"));
+    } finally {
+      socket.close();
+    }
+  }
+
+  @Test
+  public void testUploadReject() throws Exception {
+    HttpURLConnection urlConn = request("/test/v1/uploadReject", HttpMethod.POST, true);
+    try {
+      urlConn.setChunkedStreamingMode(1024);
+      urlConn.getOutputStream().write("Rejected Content".getBytes(Charsets.UTF_8));
+      Assert.assertEquals(HttpResponseStatus.BAD_REQUEST.getCode(), urlConn.getResponseCode());
+    } finally {
+      urlConn.disconnect();
+    }
+  }
+
+  protected Socket createRawSocket(URL url) throws IOException {
+    return new Socket(url.getHost(), url.getPort());
   }
 
   protected void testContent(String path, String content) throws IOException {
