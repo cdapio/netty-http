@@ -461,7 +461,14 @@ public class HttpServerTest {
     try {
       urlConn.setChunkedStreamingMode(1024);
       urlConn.getOutputStream().write("Rejected Content".getBytes(Charsets.UTF_8));
-      Assert.assertEquals(HttpResponseStatus.BAD_REQUEST.getCode(), urlConn.getResponseCode());
+      try {
+        urlConn.getInputStream();
+        Assert.fail();
+      } catch (IOException e) {
+        // Expect to get exception since server response with 400. Just drain the error stream.
+        ByteStreams.toByteArray(urlConn.getErrorStream());
+        Assert.assertEquals(HttpResponseStatus.BAD_REQUEST.getCode(), urlConn.getResponseCode());
+      }
     } finally {
       urlConn.disconnect();
     }
