@@ -138,7 +138,9 @@ public final class HttpResourceModel {
           ("Problem accessing: %s. Reason: Method Not Allowed", request.getUri()));
       }
     } catch (Throwable e) {
-      throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR, "Error in executing path", e);
+      throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                                 String.format("Error in executing request: %s %s", request.getMethod(),
+                                               request.getUri()), e);
     }
   }
 
