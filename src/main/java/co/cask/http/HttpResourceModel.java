@@ -139,7 +139,8 @@ public final class HttpResourceModel {
       }
     } catch (Throwable e) {
       throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                                 String.format("Error in executing path:"));
+                                 String.format("Error in executing request: %s %s", request.getMethod(),
+                                               request.getUri()), e);
     }
   }
 
