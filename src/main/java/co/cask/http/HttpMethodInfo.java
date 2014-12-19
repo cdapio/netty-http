@@ -17,7 +17,6 @@
 package co.cask.http;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMultimap;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
@@ -69,22 +68,15 @@ class HttpMethodInfo {
       // Casting guarantee to be succeeded.
       bodyConsumer = (BodyConsumer) method.invoke(handler, args);
       if (bodyConsumer != null && requestContent.readable()) {
-        try {
-          bodyConsumer.chunk(requestContent, responder);
-        } catch (Throwable t) {
-          bodyConsumer.handleError(t);
-          bodyConsumer = null;
-          throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR, "", t);
-        }
+        bodyConsumerChunk(requestContent);
       }
       if (bodyConsumer != null && !isChunkedRequest) {
-        bodyConsumer.finished(responder);
-        bodyConsumer = null;
+        bodyConsumerFinish();
       }
     } else {
       // Actually <T> would be void
-      method.invoke(handler, args);
       bodyConsumer = null;
+      method.invoke(handler, args);
     }
   }
 
@@ -98,17 +90,45 @@ class HttpMethodInfo {
       return;
     }
     if (chunk.isLast()) {
-      bodyConsumer.finished(responder);
-      bodyConsumer = null;
+      bodyConsumerFinish();
     } else {
-      try {
-        bodyConsumer.chunk(chunk.getContent(), responder);
-      } catch (Throwable t) {
-        bodyConsumer.handleError(t);
-        bodyConsumer = null;
-        throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR, "", t);
-      }
+      bodyConsumerChunk(chunk.getContent());
     }
+  }
+
+  /**
+   * Calls the {@link BodyConsumer#chunk(ChannelBuffer, HttpResponder)} method. If the chunk method call
+   * throws exception, the {@link BodyConsumer#handleError(Throwable)} will be called and this method will
+   * throw {@link HandlerException}.
+   */
+  private void bodyConsumerChunk(ChannelBuffer buffer) throws HandlerException {
+    try {
+      bodyConsumer.chunk(buffer, responder);
+    } catch (Throwable t) {
+      throw bodyConsumerError(t);
+    }
+  }
+
+  /**
+   * Calls {@link BodyConsumer#finished(HttpResponder)} method. The current bodyConsumer will be set to {@code null}
+   * after the call.
+   */
+  private void bodyConsumerFinish() {
+    BodyConsumer consumer = bodyConsumer;
+    bodyConsumer = null;
+    consumer.finished(responder);
+  }
+
+  /**
+   * Calls {@link BodyConsumer#handleError(Throwable)} and throws {@link HandlerException}. The current
+   * bodyConsumer will be set to {@code null} after the call.
+   */
+  private HandlerException bodyConsumerError(Throwable cause) throws HandlerException {
+    BodyConsumer consumer = bodyConsumer;
+    bodyConsumer = null;
+    consumer.handleError(cause);
+
+    throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR, "", cause);
   }
 
   /**
