@@ -133,7 +133,7 @@ public class RequestRouter extends SimpleChannelUpstreamHandler {
 
   public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) {
 
-    LOG.error("Exception caught in channel processing.", e.getCause());
+    LOG.trace("Exception caught in channel processing.", e.getCause());
 
     if (!exceptionRaised.get()) {
       exceptionRaised.set(true);
