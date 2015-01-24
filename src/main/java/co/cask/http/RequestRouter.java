@@ -132,27 +132,42 @@ public class RequestRouter extends SimpleChannelUpstreamHandler {
 
 
   public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) {
-
-    LOG.error("Exception caught in channel processing.", e.getCause());
-
+    String exceptionMessage = "Exception caught in channel processing.";
+    Throwable cause = e.getCause();
     if (!exceptionRaised.get()) {
       exceptionRaised.set(true);
 
       if (methodInfo != null) {
-        methodInfo.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getCause());
+        LOG.error(exceptionMessage, cause);
+        methodInfo.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, cause);
         methodInfo = null;
       } else {
         ChannelFuture future = Channels.future(ctx.getChannel());
         future.addListener(ChannelFutureListener.CLOSE);
-        Throwable cause = e.getCause();
         if (cause instanceof HandlerException) {
-          Channels.write(ctx, future, ((HandlerException) cause).createFailureResponse());
+          HttpResponse response = ((HandlerException) cause).createFailureResponse();
+          // trace logs for user errors, error logs for internal server errors
+          if (isUserError(response)) {
+            LOG.trace(exceptionMessage, cause);
+          } else {
+            LOG.error(exceptionMessage, cause);
+          }
+          Channels.write(ctx, future, response);
         } else {
+          LOG.error(exceptionMessage, cause);
           HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1,
                                                           HttpResponseStatus.INTERNAL_SERVER_ERROR);
           Channels.write(ctx, future, response);
         }
       }
+    } else {
+      LOG.trace(exceptionMessage, cause);
     }
+  }
+
+  private boolean isUserError(HttpResponse response) {
+    int code = response.getStatus().getCode();
+    return code == HttpResponseStatus.BAD_REQUEST.getCode() || code == HttpResponseStatus.NOT_FOUND.getCode() ||
+      code == HttpResponseStatus.METHOD_NOT_ALLOWED.getCode();
   }
 }
