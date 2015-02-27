@@ -60,9 +60,10 @@ public final class HttpResourceHandler implements HttpHandler {
    * @param handlers Iterable of HttpHandler.
    * @param handlerHooks Iterable of HandlerHook.
    * @param urlRewriter URL re-writer.
+   * @param exceptionHandler Exception handler
    */
   public HttpResourceHandler(Iterable<? extends HttpHandler> handlers, Iterable<? extends HandlerHook> handlerHooks,
-                             URLRewriter urlRewriter) {
+                             URLRewriter urlRewriter, ExceptionHandler exceptionHandler) {
     //Store the handlers to call init and destroy on all handlers.
     this.handlers = ImmutableList.copyOf(handlers);
     this.handlerHooks = ImmutableList.copyOf(handlerHooks);
@@ -88,7 +89,8 @@ public final class HttpResourceHandler implements HttpHandler {
           Set<HttpMethod> httpMethods = getHttpMethods(method);
           Preconditions.checkArgument(httpMethods.size() >= 1,
                                       String.format("No HttpMethod found for method: %s", method.getName()));
-          patternRouter.add(absolutePath, new HttpResourceModel(httpMethods, absolutePath, method, handler));
+          patternRouter.add(absolutePath, new HttpResourceModel(httpMethods, absolutePath, method,
+                                                                handler, exceptionHandler));
         } else {
           LOG.trace("Not adding method {}({}) to path routing like. HTTP calls will not be routed to this method",
                     method.getName(), method.getParameterTypes());

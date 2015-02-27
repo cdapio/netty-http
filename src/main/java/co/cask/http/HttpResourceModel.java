@@ -55,6 +55,7 @@ public final class HttpResourceModel {
   private final Method method;
   private final HttpHandler handler;
   private final List<Map<Class<? extends Annotation>, ParameterInfo<?>>> paramsInfo;
+  private final ExceptionHandler exceptionHandler;
 
   /**
    * Construct a resource model with HttpMethod, method that handles httprequest, Object that contains the method.
@@ -64,12 +65,14 @@ public final class HttpResourceModel {
    * @param method handler that handles the http request.
    * @param handler instance {@code HttpHandler}.
    */
-  public HttpResourceModel(Set<HttpMethod> httpMethods, String path, Method method, HttpHandler handler) {
+  public HttpResourceModel(Set<HttpMethod> httpMethods, String path, Method method, HttpHandler handler,
+                           ExceptionHandler exceptionHandler) {
     this.httpMethods = httpMethods;
     this.path = path;
     this.method = method;
     this.handler = handler;
     this.paramsInfo = createParametersInfos(method);
+    this.exceptionHandler = exceptionHandler;
   }
 
   /**
@@ -131,7 +134,7 @@ public final class HttpResourceModel {
           idx++;
         }
 
-        return new HttpMethodInfo(method, handler, request, responder, args);
+        return new HttpMethodInfo(method, handler, request, responder, args, exceptionHandler);
       } else {
         //Found a matching resource but could not find the right HttpMethod so return 405
         throw new HandlerException(HttpResponseStatus.METHOD_NOT_ALLOWED, String.format

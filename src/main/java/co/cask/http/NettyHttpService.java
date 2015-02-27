@@ -17,6 +17,7 @@
 package co.cask.http;
 
 import com.google.common.base.Function;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -42,7 +43,6 @@ import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -93,6 +93,7 @@ public final class NettyHttpService extends AbstractIdleService {
    * @param urlRewriter URLRewriter to rewrite incoming URLs.
    * @param httpHandlers HttpHandlers to handle the calls.
    * @param handlerHooks Hooks to be called before/after request processing by httpHandlers.
+   *
    * @deprecated Use {@link NettyHttpService.Builder} instead.
    */
   @Deprecated
@@ -102,19 +103,9 @@ public final class NettyHttpService extends AbstractIdleService {
                           RejectedExecutionHandler rejectedExecutionHandler, URLRewriter urlRewriter,
                           Iterable<? extends HttpHandler> httpHandlers,
                           Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit) {
-    this.bindAddress = bindAddress;
-    this.bossThreadPoolSize = bossThreadPoolSize;
-    this.workerThreadPoolSize = workerThreadPoolSize;
-    this.execThreadPoolSize = execThreadPoolSize;
-    this.execThreadKeepAliveSecs = execThreadKeepAliveSecs;
-    this.channelConfigs = ImmutableMap.copyOf(channelConfigs);
-    this.rejectedExecutionHandler = rejectedExecutionHandler;
-    this.channelGroup = new DefaultChannelGroup();
-    this.resourceHandler = new HttpResourceHandler(httpHandlers, handlerHooks, urlRewriter);
-    this.handlerContext = new BasicHandlerContext(this.resourceHandler);
-    this.httpChunkLimit = httpChunkLimit;
-    this.pipelineModifier = null;
-    this.sslHandlerFactory = null;
+    this(bindAddress, bossThreadPoolSize, workerThreadPoolSize, execThreadPoolSize, execThreadKeepAliveSecs,
+         channelConfigs, rejectedExecutionHandler, urlRewriter, httpHandlers, handlerHooks, httpChunkLimit,
+         null, null, new ExceptionHandler());
   }
 
   /**
@@ -131,6 +122,7 @@ public final class NettyHttpService extends AbstractIdleService {
    * @param handlerHooks Hooks to be called before/after request processing by httpHandlers.
    * @param pipelineModifier Function used to modify the pipeline.
    * @param sslHandlerFactory Object used to share SSL certificate details
+   * @param exceptionHandler Handles exceptions from calling handler methods
    */
   private NettyHttpService(InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
                            int execThreadPoolSize, long execThreadKeepAliveSecs,
@@ -139,7 +131,7 @@ public final class NettyHttpService extends AbstractIdleService {
                            Iterable<? extends HttpHandler> httpHandlers,
                            Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit,
                            Function<ChannelPipeline, ChannelPipeline> pipelineModifier,
-                           SSLHandlerFactory sslHandlerFactory) {
+                           SSLHandlerFactory sslHandlerFactory, ExceptionHandler exceptionHandler) {
     this.bindAddress = bindAddress;
     this.bossThreadPoolSize = bossThreadPoolSize;
     this.workerThreadPoolSize = workerThreadPoolSize;
@@ -148,7 +140,7 @@ public final class NettyHttpService extends AbstractIdleService {
     this.channelConfigs = ImmutableMap.copyOf(channelConfigs);
     this.rejectedExecutionHandler = rejectedExecutionHandler;
     this.channelGroup = new DefaultChannelGroup();
-    this.resourceHandler = new HttpResourceHandler(httpHandlers, handlerHooks, urlRewriter);
+    this.resourceHandler = new HttpResourceHandler(httpHandlers, handlerHooks, urlRewriter, exceptionHandler);
     this.handlerContext = new BasicHandlerContext(this.resourceHandler);
     this.httpChunkLimit = httpChunkLimit;
     this.pipelineModifier = pipelineModifier;
@@ -322,6 +314,7 @@ public final class NettyHttpService extends AbstractIdleService {
     private int httpChunkLimit;
     private SSLHandlerFactory sslHandlerFactory;
     private Function<ChannelPipeline, ChannelPipeline> pipelineModifier;
+    private ExceptionHandler exceptionHandler;
 
     // Protected constructor to prevent instantiating Builder instance directly.
     protected Builder() {
@@ -335,6 +328,7 @@ public final class NettyHttpService extends AbstractIdleService {
       channelConfigs = Maps.newHashMap();
       channelConfigs.put("backlog", DEFAULT_CONNECTION_BACKLOG);
       sslHandlerFactory = null;
+      exceptionHandler = new ExceptionHandler();
     }
 
     /**
@@ -501,6 +495,12 @@ public final class NettyHttpService extends AbstractIdleService {
       return this;
     }
 
+    public Builder setExceptionHandler(ExceptionHandler exceptionHandler) {
+      Preconditions.checkNotNull(exceptionHandler, "exceptionHandler cannot be null");
+      this.exceptionHandler = exceptionHandler;
+      return this;
+    }
+
     /**
      * @return instance of {@code NettyHttpService}
      */
@@ -515,7 +515,7 @@ public final class NettyHttpService extends AbstractIdleService {
       return new NettyHttpService(bindAddress, bossThreadPoolSize, workerThreadPoolSize,
                                   execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, rejectedExecutionHandler,
                                   urlRewriter, handlers, handlerHooks, httpChunkLimit, pipelineModifier,
-                                  sslHandlerFactory);
+                                  sslHandlerFactory, exceptionHandler);
     }
   }
 }

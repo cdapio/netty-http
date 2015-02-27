@@ -31,6 +31,7 @@ import com.google.gson.JsonObject;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpMethod;
+import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -38,6 +39,8 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -57,23 +60,32 @@ import java.util.Map;
  */
 public class HttpServerTest {
 
+  private static final Logger LOG = LoggerFactory.getLogger(HttpServerTest.class);
+
   protected static final Type STRING_MAP_TYPE = new TypeToken<Map<String, String>>() { }.getType();
   protected static final Gson GSON = new Gson();
+  protected static final ExceptionHandler EXCEPTION_HANDLER = new ExceptionHandler() {
+    @Override
+    public void handle(Throwable t, HttpRequest request, HttpResponder responder) {
+      if (t instanceof TestHandler.CustomException) {
+        responder.sendStatus(TestHandler.CustomException.HTTP_RESPONSE_STATUS);
+      } else {
+        super.handle(t, request, responder);
+      }
+    }
+  };
 
   protected static NettyHttpService service;
   protected static URI baseURI;
 
-  @ClassRule
-  public static TemporaryFolder tmpFolder = new TemporaryFolder();
-
-  @BeforeClass
-  public static void setup() throws Exception {
+  protected static NettyHttpService.Builder createBaseNettyHttpServiceBuilder() {
     List<HttpHandler> handlers = Lists.newArrayList();
     handlers.add(new TestHandler());
 
     NettyHttpService.Builder builder = NettyHttpService.builder();
     builder.addHttpHandlers(handlers);
     builder.setHttpChunkLimit(75 * 1024);
+    builder.setExceptionHandler(EXCEPTION_HANDLER);
 
     builder.modifyChannelPipeline(new Function<ChannelPipeline, ChannelPipeline>() {
       @Override
@@ -82,8 +94,15 @@ public class HttpServerTest {
         return channelPipeline;
       }
     });
+    return builder;
+  }
 
-    service = builder.build();
+  @ClassRule
+  public static TemporaryFolder tmpFolder = new TemporaryFolder();
+
+  @BeforeClass
+  public static void setup() throws Exception {
+    service = createBaseNettyHttpServiceBuilder().build();
     service.startAndWait();
     Service.State state = service.state();
     Assert.assertEquals(Service.State.RUNNING, state);
@@ -305,7 +324,7 @@ public class HttpServerTest {
   public void testHandlerException() throws Exception {
     HttpURLConnection urlConn = request("/test/v1/uexception", HttpMethod.GET);
     Assert.assertEquals(500, urlConn.getResponseCode());
-    Assert.assertEquals("Exception Encountered while processing request : User Exception",
+    Assert.assertEquals("Exception encountered while processing request : User Exception",
                         new String(ByteStreams.toByteArray(urlConn.getErrorStream()), Charsets.UTF_8));
     urlConn.disconnect();
   }
@@ -472,6 +491,27 @@ public class HttpServerTest {
     } finally {
       urlConn.disconnect();
     }
+  }
+
+  @Test
+  public void testSleep() throws Exception {
+    HttpURLConnection urlConn = request("/test/v1/sleep/10", HttpMethod.GET);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testWrongMethod() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/customException", HttpMethod.GET);
+    Assert.assertEquals(HttpResponseStatus.METHOD_NOT_ALLOWED.getCode(), urlConn.getResponseCode());
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testExceptionHandler() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/customException", HttpMethod.POST);
+    Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
+    urlConn.disconnect();
   }
 
   protected Socket createRawSocket(URL url) throws IOException {
