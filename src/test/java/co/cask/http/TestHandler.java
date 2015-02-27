@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.SortedSet;
+import java.util.concurrent.TimeUnit;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
@@ -51,6 +52,17 @@ import javax.ws.rs.QueryParam;
 public class TestHandler implements HttpHandler {
 
   private static final Gson GSON = new Gson();
+
+  @Path("sleep/{seconds}")
+  @GET
+  public void testSleep(HttpRequest request, HttpResponder responder, @PathParam("seconds") int seconds) {
+    try {
+      TimeUnit.SECONDS.sleep(seconds);
+      responder.sendStatus(HttpResponseStatus.OK);
+    } catch (InterruptedException e) {
+      responder.sendString(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+    }
+  }
 
   @Path("resource")
   @GET
@@ -289,11 +301,15 @@ public class TestHandler implements HttpHandler {
     chunker.close();
   }
 
-
   @Path("/uexception")
   @GET
   public void testException(HttpRequest request, HttpResponder responder) {
     throw Throwables.propagate(new RuntimeException("User Exception"));
+  }
+
+  @Path("/noresponse")
+  @GET
+  public void testNoResponse(HttpRequest request, HttpResponder responder) {
   }
 
   @Path("/stringQueryParam/{path}")
@@ -350,9 +366,22 @@ public class TestHandler implements HttpHandler {
     return null;
   }
 
+  @Path("/customException")
+  @POST
+  public void testCustomException(HttpRequest request, HttpResponder responder) throws CustomException {
+    throw new CustomException();
+  }
+
   @Override
   public void init(HandlerContext context) {}
 
   @Override
   public void destroy(HandlerContext context) {}
+
+  /**
+   * Custom exception class for testing exception handler.
+   */
+  public static final class CustomException extends Exception {
+    public static final HttpResponseStatus HTTP_RESPONSE_STATUS = HttpResponseStatus.SEE_OTHER;
+  }
 }

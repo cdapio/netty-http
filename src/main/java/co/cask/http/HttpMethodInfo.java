@@ -39,23 +39,28 @@ class HttpMethodInfo {
   private final HttpHandler handler;
   private final boolean isChunkedRequest;
   private final ChannelBuffer requestContent;
+  private final HttpRequest request;
   private final HttpResponder responder;
   private final Object[] args;
   private final boolean isStreaming;
+  private final ExceptionHandler exceptionHandler;
 
   private BodyConsumer bodyConsumer;
 
-  HttpMethodInfo(Method method, HttpHandler handler, HttpRequest request, HttpResponder responder, Object[] args) {
+  HttpMethodInfo(Method method, HttpHandler handler, HttpRequest request, HttpResponder responder, Object[] args,
+                 ExceptionHandler exceptionHandler) {
     this.method = method;
     this.handler = handler;
     this.isChunkedRequest = request.isChunked();
     this.requestContent = request.getContent();
-    this.responder = responder;
     this.isStreaming = BodyConsumer.class.isAssignableFrom(method.getReturnType());
+    this.request = rewriteRequest(request, isStreaming);
+    this.responder = responder;
+    this.exceptionHandler = exceptionHandler;
 
     // The actual arguments list to invoke handler method
     this.args = new Object[args.length + 2];
-    this.args[0] = rewriteRequest(request, isStreaming);
+    this.args[0] = request;
     this.args[1] = responder;
     System.arraycopy(args, 0, this.args, 2, args.length);
   }
@@ -76,7 +81,11 @@ class HttpMethodInfo {
     } else {
       // Actually <T> would be void
       bodyConsumer = null;
-      method.invoke(handler, args);
+      try {
+        method.invoke(handler, args);
+      } catch (InvocationTargetException e) {
+        exceptionHandler.handle(e.getTargetException(), request, responder);
+      }
     }
   }
 

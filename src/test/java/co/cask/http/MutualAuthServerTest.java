@@ -16,13 +16,11 @@
 
 package co.cask.http;
 
-import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.google.common.util.concurrent.Service;
-import org.jboss.netty.channel.ChannelPipeline;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 
@@ -40,9 +38,7 @@ public class MutualAuthServerTest extends HttpsServerTest {
     List<HttpHandler> handlers = Lists.newArrayList();
     handlers.add(new TestHandler());
 
-    NettyHttpService.Builder builder = NettyHttpService.builder();
-    builder.addHttpHandlers(handlers);
-    builder.setHttpChunkLimit(75 * 1024);
+    NettyHttpService.Builder builder = createBaseNettyHttpServiceBuilder();
 
     File keyStore = tmpFolder.newFile();
     ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("cert.jks")),
@@ -56,14 +52,6 @@ public class MutualAuthServerTest extends HttpsServerTest {
     builder.enableSSL(SSLConfig.builder(keyStore, keyStorePassword).setTrustKeyStore(trustKeyStore)
                         .setTrustKeyStorePassword(trustKeyStorePassword)
                         .build());
-
-    builder.modifyChannelPipeline(new Function<ChannelPipeline, ChannelPipeline>() {
-      @Override
-      public ChannelPipeline apply(ChannelPipeline channelPipeline) {
-        channelPipeline.addAfter("decoder", "testhandler", new TestChannelHandler());
-        return channelPipeline;
-      }
-    });
 
     setSslClientContext(new SSLClientContext(trustKeyStore, trustKeyStorePassword));
     service = builder.build();

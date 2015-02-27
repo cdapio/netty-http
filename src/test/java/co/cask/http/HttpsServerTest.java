@@ -16,13 +16,11 @@
 
 package co.cask.http;
 
-import com.google.common.base.Function;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
 import com.google.common.util.concurrent.Service;
-import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpMethod;
 import org.junit.Assert;
@@ -38,8 +36,6 @@ import java.util.List;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SSLSocketFactory;
 
 /**
  * Test the HttpsServer.
@@ -53,10 +49,6 @@ public class HttpsServerTest extends HttpServerTest {
     List<HttpHandler> handlers = Lists.newArrayList();
     handlers.add(new TestHandler());
 
-    NettyHttpService.Builder builder = NettyHttpService.builder();
-    builder.addHttpHandlers(handlers);
-    builder.setHttpChunkLimit(75 * 1024);
-
     File keyStore = tmpFolder.newFile();
     ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("cert.jks")),
                      Files.newOutputStreamSupplier(keyStore));
@@ -69,16 +61,9 @@ public class HttpsServerTest extends HttpServerTest {
      * CertificatePassword : Certificate password if different from Key Store password or null
     */
 
+    NettyHttpService.Builder builder = createBaseNettyHttpServiceBuilder();
     builder.enableSSL(SSLConfig.builder(keyStore, "secret").setCertificatePassword("secret")
                         .build());
-
-    builder.modifyChannelPipeline(new Function<ChannelPipeline, ChannelPipeline>() {
-      @Override
-      public ChannelPipeline apply(ChannelPipeline channelPipeline) {
-        channelPipeline.addAfter("decoder", "testhandler", new TestChannelHandler());
-        return channelPipeline;
-      }
-    });
 
     sslClientContext = new SSLClientContext();
     service = builder.build();
@@ -89,7 +74,7 @@ public class HttpsServerTest extends HttpServerTest {
     int port = service.getBindAddress().getPort();
     baseURI = URI.create(String.format("https://localhost:%d", port));
   }
-  
+
   @Override
   protected HttpURLConnection request(String path, HttpMethod method, boolean keepAlive) throws IOException {
     URL url = baseURI.resolve(path).toURL();
