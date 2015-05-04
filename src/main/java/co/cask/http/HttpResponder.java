@@ -110,17 +110,6 @@ public interface HttpResponder {
   void sendBytes(HttpResponseStatus status, ByteBuffer buffer, @Nullable Multimap<String, String> headers);
 
   /**
-   * Sends error message back to the client.
-   *
-   * @param status Status of the response.
-   * @param errorMessage Error message sent back to the client.
-   *
-   * @deprecated Same as calling {@link #sendString(org.jboss.netty.handler.codec.http.HttpResponseStatus, String)}
-   */
-  @Deprecated
-  void sendError(HttpResponseStatus status, String errorMessage);
-
-  /**
    * Respond to the client saying the response will be in chunks. The response body can be sent in chunks
    * using the {@link ChunkResponder} returned.
    *

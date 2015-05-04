@@ -260,7 +260,7 @@ public final class HttpResourceModel {
     private final Function<T, Object> converter;
 
     static <V> ParameterInfo<V> create(Annotation annotation, @Nullable Function<V, Object> converter) {
-      return new ParameterInfo<V>(annotation, converter);
+      return new ParameterInfo<>(annotation, converter);
     }
 
     private ParameterInfo(Annotation annotation, @Nullable Function<T, Object> converter) {

@@ -73,13 +73,11 @@ public final class NettyHttpService extends AbstractIdleService {
   private final ChannelGroup channelGroup;
   private final HttpResourceHandler resourceHandler;
   private final Function<ChannelPipeline, ChannelPipeline> pipelineModifier;
-
+  private final int httpChunkLimit;
+  private final SSLHandlerFactory sslHandlerFactory;
 
   private ServerBootstrap bootstrap;
   private InetSocketAddress bindAddress;
-  private int httpChunkLimit;
-  private SSLHandlerFactory sslHandlerFactory;
-
 
   /**
    * Initialize NettyHttpService.
@@ -300,6 +298,8 @@ public final class NettyHttpService extends AbstractIdleService {
       new ThreadPoolExecutor.CallerRunsPolicy();
     private static final int DEFAULT_HTTP_CHUNK_LIMIT = 150 * 1024 * 1024;
 
+    private final Map<String, Object> channelConfigs;
+
     private Iterable<? extends HttpHandler> handlers;
     private Iterable<? extends HandlerHook> handlerHooks = ImmutableList.of();
     private URLRewriter urlRewriter = null;
@@ -310,7 +310,6 @@ public final class NettyHttpService extends AbstractIdleService {
     private int port;
     private long execThreadKeepAliveSecs;
     private RejectedExecutionHandler rejectedExecutionHandler;
-    private Map<String, Object> channelConfigs;
     private int httpChunkLimit;
     private SSLHandlerFactory sslHandlerFactory;
     private Function<ChannelPipeline, ChannelPipeline> pipelineModifier;

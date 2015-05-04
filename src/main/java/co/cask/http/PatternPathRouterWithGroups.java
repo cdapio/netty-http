@@ -40,10 +40,10 @@ public final class PatternPathRouterWithGroups<T> {
   // non-greedy wild card match.
   private static final Pattern WILD_CARD_PATTERN = Pattern.compile("\\*\\*");
 
-  private final List<ImmutablePair<Pattern, RouteDestinationWithGroups<T>>> patternRouteList;
+  private final List<ImmutablePair<Pattern, RouteDestinationWithGroups>> patternRouteList;
 
   public static <T> PatternPathRouterWithGroups<T> create() {
-    return new PatternPathRouterWithGroups<T>();
+    return new PatternPathRouterWithGroups<>();
   }
 
   /**
@@ -89,7 +89,7 @@ public final class PatternPathRouterWithGroups<T> {
     sb.setLength(sb.length() - 1);
 
     Pattern pattern = Pattern.compile(sb.toString());
-    patternRouteList.add(ImmutablePair.of(pattern, new RouteDestinationWithGroups<T>(destination, groupNames)));
+    patternRouteList.add(ImmutablePair.of(pattern, new RouteDestinationWithGroups(destination, groupNames)));
   }
 
   /**
@@ -106,7 +106,7 @@ public final class PatternPathRouterWithGroups<T> {
 
     List<RoutableDestination<T>> result = Lists.newArrayList();
 
-    for (ImmutablePair<Pattern, RouteDestinationWithGroups<T>> patternRoute : patternRouteList) {
+    for (ImmutablePair<Pattern, RouteDestinationWithGroups> patternRoute : patternRouteList) {
       ImmutableMap.Builder<String, String> groupNameValuesBuilder = ImmutableMap.builder();
       Matcher matcher =  patternRoute.getFirst().matcher(cleanPath);
       if (matcher.matches()) {
@@ -116,8 +116,8 @@ public final class PatternPathRouterWithGroups<T> {
           groupNameValuesBuilder.put(name, value);
           matchIndex++;
         }
-        result.add(new RoutableDestination<T>(patternRoute.getSecond().getDestination(),
-                                              groupNameValuesBuilder.build()));
+        result.add(new RoutableDestination<>(patternRoute.getSecond().getDestination(),
+                                             groupNameValuesBuilder.build()));
       }
     }
     return result;
@@ -125,10 +125,8 @@ public final class PatternPathRouterWithGroups<T> {
 
   /**
    * Helper class to store the groupNames and Destination.
-   *
-   * @param <T> Destination.
    */
-  private final class RouteDestinationWithGroups<T> {
+  private final class RouteDestinationWithGroups {
 
     private final T destination;
     private final List<String> groupNames;

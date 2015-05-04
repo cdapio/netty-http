@@ -54,12 +54,11 @@ public abstract class AbstractHttpResponder implements HttpResponder {
   public void sendJson(HttpResponseStatus status, Object object, Type type, Gson gson) {
     try {
       ChannelBuffer channelBuffer = ChannelBuffers.dynamicBuffer();
-      JsonWriter jsonWriter = new JsonWriter(new OutputStreamWriter(new ChannelBufferOutputStream(channelBuffer),
-                                                                    Charsets.UTF_8));
-      try {
+      try (
+        JsonWriter jsonWriter = new JsonWriter(
+          new OutputStreamWriter(new ChannelBufferOutputStream(channelBuffer), Charsets.UTF_8))
+      ) {
         gson.toJson(object, type, jsonWriter);
-      } finally {
-        jsonWriter.close();
       }
 
       sendContent(status, channelBuffer, "application/json", ImmutableMultimap.<String, String>of());
@@ -108,8 +107,4 @@ public abstract class AbstractHttpResponder implements HttpResponder {
     sendContent(status, ChannelBuffers.wrappedBuffer(buffer), "application/octet-stream", headers);
   }
 
-  @Override
-  public final void sendError(HttpResponseStatus status, String errorMessage) {
-    sendString(status, errorMessage);
-  }
 }

@@ -105,12 +105,6 @@ final class WrappedHttpResponder implements HttpResponder {
   }
 
   @Override
-  public void sendError(HttpResponseStatus status, String errorMessage) {
-    delegate.sendError(status, errorMessage);
-    runHook(status);
-  }
-
-  @Override
   public ChunkResponder sendChunkStart(final HttpResponseStatus status, Multimap<String, String> headers) {
     final ChunkResponder chunkResponder = delegate.sendChunkStart(status, headers);
     return new ChunkResponder() {

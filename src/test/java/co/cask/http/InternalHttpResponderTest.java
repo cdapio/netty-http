@@ -76,7 +76,7 @@ public class InternalHttpResponderTest {
   @Test
   public void testSendError() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
-    responder.sendError(HttpResponseStatus.NOT_FOUND, "not found");
+    responder.sendString(HttpResponseStatus.NOT_FOUND, "not found");
 
     validateResponse(responder.getResponse(), HttpResponseStatus.NOT_FOUND, "not found");
   }
@@ -109,12 +109,11 @@ public class InternalHttpResponderTest {
     if (expectedData != null) {
       // read it twice to make sure the input supplier gives the full stream more than once.
       for (int i = 0; i < 2; i++) {
-        BufferedReader reader = new BufferedReader(new InputStreamReader(response.getInputSupplier().getInput()));
-        try {
+        try (
+          BufferedReader reader = new BufferedReader(new InputStreamReader(response.getInputSupplier().getInput()))
+        ) {
           String data = reader.readLine();
           Assert.assertEquals(expectedData, data);
-        } finally {
-          reader.close();
         }
       }
     }
