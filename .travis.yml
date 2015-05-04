@@ -22,5 +22,3 @@ jdk:
 branches:
   only:
     - develop
-    - /^feature\/.*$/
-    - /^hotfix\/.*$/
