@@ -274,13 +274,13 @@ public final class ParamConvertUtils {
     return new Function<List<String>, Object>() {
       @Override
       public Object apply(List<String> values) {
-        ImmutableCollection.Builder<?> builder;
+        ImmutableCollection.Builder<? extends Comparable> builder;
         if (rawType == List.class) {
           builder = ImmutableList.builder();
         } else if (rawType == Set.class) {
           builder = ImmutableSet.builder();
         } else {
-          builder = ImmutableSortedSet.<Comparable>naturalOrder();
+          builder = ImmutableSortedSet.naturalOrder();
         }
 
         for (String value : values) {

@@ -141,8 +141,8 @@ public final class HttpResourceHandler implements HttpHandler {
           return;
         }
       } catch (Throwable t) {
-        responder.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                            String.format("Caught exception processing request. Reason: %s",
+        responder.sendString(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                             String.format("Caught exception processing request. Reason: %s",
                                           t.getMessage()));
         LOG.error("Exception thrown during rewriting of uri {}", request.getUri(), t);
         return;
@@ -179,23 +179,22 @@ public final class HttpResourceHandler implements HttpHandler {
           // Wrap responder to make post hook calls.
           responder = new WrappedHttpResponder(responder, handlerHooks, request, info);
           if (httpResourceModel.handle(request, responder, matchedDestination.getGroupNameValues()).isStreaming()) {
-            responder.sendError(HttpResponseStatus.METHOD_NOT_ALLOWED,
-                                String.format("Body Consumer not supported for internalHttpResponder",
-                                              request.getUri()));
+            responder.sendString(HttpResponseStatus.METHOD_NOT_ALLOWED,
+                                 String.format("Body Consumer not supported for internalHttpResponder: %s",
+                                               request.getUri()));
           }
         }
       } else if (routableDestinations.size() > 0)  {
         //Found a matching resource but could not find the right HttpMethod so return 405
-        responder.sendError(HttpResponseStatus.METHOD_NOT_ALLOWED,
-                            String.format("Problem accessing: %s. Reason: Method Not Allowed", request.getUri()));
+        responder.sendString(HttpResponseStatus.METHOD_NOT_ALLOWED,
+                             String.format("Problem accessing: %s. Reason: Method Not Allowed", request.getUri()));
       } else {
-        responder.sendError(HttpResponseStatus.NOT_FOUND, String.format("Problem accessing: %s. Reason: Not Found",
-                                                                        request.getUri()));
+        responder.sendString(HttpResponseStatus.NOT_FOUND, String.format("Problem accessing: %s. Reason: Not Found",
+                                                                         request.getUri()));
       }
     } catch (Throwable t) {
-      responder.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                          String.format("Caught exception processing request. Reason: %s",
-                                        t.getMessage()));
+      responder.sendString(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                           String.format("Caught exception processing request. Reason: %s", t.getMessage()));
       LOG.error("Exception thrown during request processing for uri {}", request.getUri(), t);
     }
   }

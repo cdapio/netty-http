@@ -53,7 +53,7 @@ public interface HttpHandler {
    *
    * @param context instance of HandlerContext.
    */
-  public void init(HandlerContext context);
+  void init(HandlerContext context);
 
   /**
    * destroy method will be called before shutdown. Any teardown task can be performed in this method.
@@ -61,5 +61,5 @@ public interface HttpHandler {
    *
    * @param context instance of HandlerContext.
   */
-  public void destroy(HandlerContext context);
+  void destroy(HandlerContext context);
 }
