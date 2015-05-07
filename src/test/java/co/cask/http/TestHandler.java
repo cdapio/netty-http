@@ -17,23 +17,32 @@
 package co.cask.http;
 
 import com.google.common.base.Charsets;
+import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Assert;
 
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
@@ -51,7 +60,60 @@ import javax.ws.rs.QueryParam;
 @Path("/test/v1")
 public class TestHandler implements HttpHandler {
 
-  private static final Gson GSON = new Gson();
+  public static final List<String> ITERABLE_TEST = ImmutableList.of("1", "2", "3");
+  public static final List<Person> ITERABLE_POJO_TEST = ImmutableList.of(
+    new Person("joe", 85),
+    new Person("bob", 42),
+    new Person("zz", 22)
+  );
+  public static final List<Person> ITERABLE_POJO_TEST_CUSTOM_OUTPUT = ImmutableList.of(
+    new Person("joe-sdf", 85),
+    new Person("bob-sdf", 42),
+    new Person("zz-sdf", 22)
+  );
+
+  private static final Gson GSON = new GsonBuilder()
+    .registerTypeAdapter(Person.class, new PersonAdapter())
+    .create();
+
+  @Path("iterable")
+  @GET
+  public void testGetIterable(HttpRequest request, HttpResponder responder) {
+    Iterable<String> iterable = Iterables.transform(ITERABLE_TEST, new Function<String, String>() {
+      @Nullable
+      @Override
+      public String apply(@Nullable String input) {
+        return input;
+      }
+    });
+    responder.sendJson(HttpResponseStatus.OK, iterable);
+  }
+
+  @Path("iterable-pojo")
+  @GET
+  public void testGetIterablePOJO(HttpRequest request, HttpResponder responder) {
+    Iterable<Person> iterable = Iterables.transform(ITERABLE_POJO_TEST, new Function<Person, Person>() {
+      @Nullable
+      @Override
+      public Person apply(@Nullable Person input) {
+        return input;
+      }
+    });
+    responder.sendJson(HttpResponseStatus.OK, iterable);
+  }
+
+  @Path("iterable-pojo-custom-gson-adapter")
+  @GET
+  public void testGetIterablePOJOCustomGSONAdapter(HttpRequest request, HttpResponder responder) {
+    Iterable<Person> iterable = Iterables.transform(ITERABLE_POJO_TEST, new Function<Person, Person>() {
+      @Nullable
+      @Override
+      public Person apply(@Nullable Person input) {
+        return input;
+      }
+    });
+    responder.sendJson(HttpResponseStatus.OK, iterable, new TypeToken<Iterable<Person>>() { }.getType(), GSON);
+  }
 
   @Path("sleep/{seconds}")
   @GET
@@ -383,5 +445,78 @@ public class TestHandler implements HttpHandler {
    */
   public static final class CustomException extends Exception {
     public static final HttpResponseStatus HTTP_RESPONSE_STATUS = HttpResponseStatus.SEE_OTHER;
+  }
+
+  /**
+   * POJO for testing.
+   */
+  public static final class Person {
+    private final String name;
+    private final int age;
+
+    public Person(String name, int age) {
+      this.name = name;
+      this.age = age;
+    }
+
+    public String getName() {
+      return name;
+    }
+
+    public int getAge() {
+      return age;
+    }
+
+    @Override
+    public String toString() {
+      final StringBuilder sb = new StringBuilder("Person{");
+      sb.append("name='").append(name).append('\'');
+      sb.append(", age=").append(age);
+      sb.append('}');
+      return sb.toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+
+      Person person = (Person) o;
+
+      if (age != person.age) {
+        return false;
+      }
+
+      if (name != null ? !name.equals(person.name) : person.name != null) {
+        return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      int result = name != null ? name.hashCode() : 0;
+      result = 31 * result + age;
+      return result;
+    }
+  }
+
+  /**
+   * GSON adapter for {@link Person}.
+   */
+  private static class PersonAdapter implements JsonSerializer<Person> {
+    @Override
+    public JsonElement serialize(Person src, Type typeOfSrc, JsonSerializationContext context) {
+      JsonObject result = new JsonObject();
+      result.addProperty("name", src.getName() + "-sdf");
+      result.addProperty("age", src.getAge());
+      return result;
+    }
   }
 }

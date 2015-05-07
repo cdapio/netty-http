@@ -83,6 +83,7 @@ public class HttpServerTest {
     handlers.add(new TestHandler());
 
     NettyHttpService.Builder builder = NettyHttpService.builder();
+    builder.setHost("0.0.0.0");
     builder.addHttpHandlers(handlers);
     builder.setHttpChunkLimit(75 * 1024);
     builder.setExceptionHandler(EXCEPTION_HANDLER);
@@ -114,6 +115,32 @@ public class HttpServerTest {
   @AfterClass
   public static void teardown() throws Exception {
     service.stopAndWait();
+  }
+
+  @Test
+  public void testGetIterable() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/iterable", HttpMethod.GET);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    List<String> result = GSON.fromJson(getContent(urlConn), new TypeToken<List<String>>() { }.getType());
+    Assert.assertEquals(TestHandler.ITERABLE_TEST, result);
+  }
+
+  @Test
+  public void testGetIterablePOJO() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/iterable-pojo", HttpMethod.GET);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    List<TestHandler.Person> result = GSON.fromJson(
+      getContent(urlConn), new TypeToken<List<TestHandler.Person>>() { }.getType());
+    Assert.assertEquals(TestHandler.ITERABLE_POJO_TEST, result);
+  }
+
+  @Test
+  public void testGetIterablePOJOCustomGSONAdapter() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/iterable-pojo-custom-gson-adapter", HttpMethod.GET);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    List<TestHandler.Person> result = GSON.fromJson(
+      getContent(urlConn), new TypeToken<List<TestHandler.Person>>() { }.getType());
+    Assert.assertEquals(TestHandler.ITERABLE_POJO_TEST_CUSTOM_OUTPUT, result);
   }
 
   @Test

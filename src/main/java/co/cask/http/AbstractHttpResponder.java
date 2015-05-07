@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import javax.annotation.Nullable;
 
 /**
@@ -53,6 +54,11 @@ public abstract class AbstractHttpResponder implements HttpResponder {
   @Override
   public void sendJson(HttpResponseStatus status, Object object, Type type, Gson gson) {
     try {
+      if (object instanceof Iterable) {
+        object = new IterableCollection<Object>((Iterable<Object>) object);
+        type = Collection.class;
+      }
+
       ChannelBuffer channelBuffer = ChannelBuffers.dynamicBuffer();
       JsonWriter jsonWriter = new JsonWriter(new OutputStreamWriter(new ChannelBufferOutputStream(channelBuffer),
                                                                     Charsets.UTF_8));
