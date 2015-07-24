@@ -372,6 +372,37 @@ public class TestHandler implements HttpHandler {
     throw new CustomException();
   }
 
+  // streaming endpoint that throws custom exception at different points
+  @Path("/stream/customException")
+  @POST
+  public BodyConsumer testStreamCustomException(HttpRequest request, HttpResponder responder,
+                                                @HeaderParam("failOn") final  String failOn) throws CustomException {
+    if ("start".equals(failOn)) {
+      throw new CustomException();
+    }
+
+    return new BodyConsumer() {
+      @Override
+      public void chunk(ChannelBuffer request, HttpResponder responder) {
+        if ("chunk".equals(failOn)) {
+          throw new CustomException();
+        }
+      }
+
+      @Override
+      public void finished(HttpResponder responder) {
+        if ("finish".equals(failOn)) {
+          throw new CustomException();
+        }
+        responder.sendStatus(HttpResponseStatus.OK);
+      }
+
+      @Override
+      public void handleError(Throwable cause) {
+      }
+    };
+  }
+
   @Override
   public void init(HandlerContext context) {}
 
@@ -381,7 +412,7 @@ public class TestHandler implements HttpHandler {
   /**
    * Custom exception class for testing exception handler.
    */
-  public static final class CustomException extends Exception {
+  public static final class CustomException extends RuntimeException {
     public static final HttpResponseStatus HTTP_RESPONSE_STATUS = HttpResponseStatus.SEE_OTHER;
   }
 }
