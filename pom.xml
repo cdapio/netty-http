@@ -20,7 +20,7 @@
   <groupId>co.cask.http</groupId>
   <artifactId>netty-http</artifactId>
   <version>0.12.0-SNAPSHOT</version>
-  <packaging>jar</packaging>
+  <packaging>bundle</packaging>
   <name>Netty based path router</name>
   <description>Netty based path router</description>
   <url>https://github.com/caskdata/netty-http</url>
@@ -272,6 +272,31 @@
             <deployAtEnd>true</deployAtEnd>
           </configuration>
         </plugin>
+
+        <!-- Bundle plugin -->
+        <plugin>
+          <groupId>org.apache.felix</groupId>
+            <artifactId>maven-bundle-plugin</artifactId>
+            <extensions>true</extensions>
+            <configuration>
+              <instructions>
+                <Bundle-Vendor>Cask</Bundle-Vendor>
+                  <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
+                  <Export-Package>co.cask.http.*;version="1.0.0"</Export-Package>
+                  <Import-Package>
+                    org.jboss.netty.*,
+                    com.google.gson.*,
+                    com.google.common.*,
+                    javax.ws.rs.*,
+                    org.slf4j.*,
+                    javax.net.ssl.*,
+                    org.apache.commons.beanutils.*
+                  </Import-Package>
+                  <Embed-Dependency>netty-http</Embed-Dependency>
+                  <_dsannotations>*</_dsannotations>
+                  </instructions>
+              </configuration>
+          </plugin>
       </plugins>
     </pluginManagement>
 
@@ -300,6 +325,11 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-deploy-plugin</artifactId>
         <version>2.8</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.felix</groupId>
+        <artifactId>maven-bundle-plugin</artifactId>
+        <version>2.5.4</version>
       </plugin>
     </plugins>
   </build>
