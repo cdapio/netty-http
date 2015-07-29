@@ -24,6 +24,8 @@ import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -34,6 +36,8 @@ import java.lang.reflect.Method;
  * context as attachment.
  */
 class HttpMethodInfo {
+
+  private static final Logger LOG = LoggerFactory.getLogger(HttpMethodInfo.class);
 
   private final Method method;
   private final HttpHandler handler;
@@ -119,6 +123,8 @@ class HttpMethodInfo {
         bodyConsumerError(t);
       } catch (Throwable t2) {
         exceptionHandler.handle(t2, request, responder);
+        // log original throwable since we'll lose it otherwise
+        LOG.debug("Handled exception thrown from handleError. original exception from chunk call was:", t);
         return;
       }
       exceptionHandler.handle(t, request, responder);
