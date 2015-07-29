@@ -39,7 +39,8 @@ public abstract class BodyConsumer {
 
   /**
    * When there is exception on netty while streaming, it will be propagated to handler
-   * so the handler can do the cleanup.
+   * so the handler can do the cleanup. Implementations should not write to an HttpResponder.
+   * Instead, use a {@link ExceptionHandler}.
    * @param cause
    */
   public abstract void handleError(Throwable cause);
