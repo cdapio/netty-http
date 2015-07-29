@@ -115,7 +115,12 @@ class HttpMethodInfo {
     try {
       bodyConsumer.chunk(buffer, responder);
     } catch (Throwable t) {
-      bodyConsumerError(t);
+      try {
+        bodyConsumerError(t);
+      } catch (Throwable t2) {
+        exceptionHandler.handle(t2, request, responder);
+        return;
+      }
       exceptionHandler.handle(t, request, responder);
     }
   }

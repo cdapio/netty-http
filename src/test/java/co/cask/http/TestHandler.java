@@ -376,7 +376,7 @@ public class TestHandler implements HttpHandler {
   @Path("/stream/customException")
   @POST
   public BodyConsumer testStreamCustomException(HttpRequest request, HttpResponder responder,
-                                                @HeaderParam("failOn") final  String failOn) throws CustomException {
+                                                @HeaderParam("failOn") final String failOn) throws CustomException {
     if ("start".equals(failOn)) {
       throw new CustomException();
     }
@@ -386,6 +386,8 @@ public class TestHandler implements HttpHandler {
       public void chunk(ChannelBuffer request, HttpResponder responder) {
         if ("chunk".equals(failOn)) {
           throw new CustomException();
+        } else if ("error".equals(failOn)) {
+          throw new RuntimeException();
         }
       }
 
@@ -399,6 +401,9 @@ public class TestHandler implements HttpHandler {
 
       @Override
       public void handleError(Throwable cause) {
+        if ("error".equals(failOn)) {
+          throw new CustomException();
+        }
       }
     };
   }

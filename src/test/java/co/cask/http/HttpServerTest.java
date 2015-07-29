@@ -540,6 +540,13 @@ public class HttpServerTest {
     Files.copy(fname, urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
     urlConn.disconnect();
+
+    // exception in body consumer's handleError
+    urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
+    urlConn.setRequestProperty("failOn", "error");
+    Files.copy(fname, urlConn.getOutputStream());
+    Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
+    urlConn.disconnect();
   }
 
   protected Socket createRawSocket(URL url) throws IOException {
