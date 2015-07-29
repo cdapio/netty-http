@@ -509,7 +509,42 @@ public class HttpServerTest {
 
   @Test
   public void testExceptionHandler() throws IOException {
+    // exception in method
     HttpURLConnection urlConn = request("/test/v1/customException", HttpMethod.POST);
+    Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    //create a random file to be uploaded.
+    int size = 20 * 1024;
+    File fname = tmpFolder.newFile();
+    RandomAccessFile randf = new RandomAccessFile(fname, "rw");
+    randf.setLength(size);
+    randf.close();
+
+    // exception in streaming method before body consumer is returned
+    urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
+    urlConn.setRequestProperty("failOn", "start");
+    Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    // exception in body consumer's chunk
+    urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
+    urlConn.setRequestProperty("failOn", "chunk");
+    Files.copy(fname, urlConn.getOutputStream());
+    Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    // exception in body consumer's onFinish
+    urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
+    urlConn.setRequestProperty("failOn", "finish");
+    Files.copy(fname, urlConn.getOutputStream());
+    Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    // exception in body consumer's handleError
+    urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
+    urlConn.setRequestProperty("failOn", "error");
+    Files.copy(fname, urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
     urlConn.disconnect();
   }

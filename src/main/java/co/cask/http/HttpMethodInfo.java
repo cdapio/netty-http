@@ -24,6 +24,8 @@ import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -34,6 +36,8 @@ import java.lang.reflect.Method;
  * context as attachment.
  */
 class HttpMethodInfo {
+
+  private static final Logger LOG = LoggerFactory.getLogger(HttpMethodInfo.class);
 
   private final Method method;
   private final HttpHandler handler;
@@ -69,22 +73,23 @@ class HttpMethodInfo {
    * Calls the httpHandler method.
    */
   void invoke() throws Exception {
+    bodyConsumer = null;
+    Object invokeResult;
+    try {
+      invokeResult = method.invoke(handler, args);
+    } catch (InvocationTargetException e) {
+      exceptionHandler.handle(e.getTargetException(), request, responder);
+      return;
+    }
+
     if (isStreaming) {
       // Casting guarantee to be succeeded.
-      bodyConsumer = (BodyConsumer) method.invoke(handler, args);
+      bodyConsumer = (BodyConsumer) invokeResult;
       if (bodyConsumer != null && requestContent.readable()) {
         bodyConsumerChunk(requestContent);
       }
       if (bodyConsumer != null && !isChunkedRequest) {
         bodyConsumerFinish();
-      }
-    } else {
-      // Actually <T> would be void
-      bodyConsumer = null;
-      try {
-        method.invoke(handler, args);
-      } catch (InvocationTargetException e) {
-        exceptionHandler.handle(e.getTargetException(), request, responder);
       }
     }
   }
@@ -114,7 +119,15 @@ class HttpMethodInfo {
     try {
       bodyConsumer.chunk(buffer, responder);
     } catch (Throwable t) {
-      throw bodyConsumerError(t);
+      try {
+        bodyConsumerError(t);
+      } catch (Throwable t2) {
+        exceptionHandler.handle(t2, request, responder);
+        // log original throwable since we'll lose it otherwise
+        LOG.debug("Handled exception thrown from handleError. original exception from chunk call was:", t);
+        return;
+      }
+      exceptionHandler.handle(t, request, responder);
     }
   }
 
@@ -125,19 +138,21 @@ class HttpMethodInfo {
   private void bodyConsumerFinish() {
     BodyConsumer consumer = bodyConsumer;
     bodyConsumer = null;
-    consumer.finished(responder);
+    try {
+      consumer.finished(responder);
+    } catch (Throwable t) {
+      exceptionHandler.handle(t, request, responder);
+    }
   }
 
   /**
-   * Calls {@link BodyConsumer#handleError(Throwable)} and throws {@link HandlerException}. The current
+   * Calls {@link BodyConsumer#handleError(Throwable)}. The current
    * bodyConsumer will be set to {@code null} after the call.
    */
-  private HandlerException bodyConsumerError(Throwable cause) throws HandlerException {
+  private void bodyConsumerError(Throwable cause) {
     BodyConsumer consumer = bodyConsumer;
     bodyConsumer = null;
     consumer.handleError(cause);
-
-    throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR, "", cause);
   }
 
   /**
