@@ -17,12 +17,11 @@
 package co.cask.http;
 
 import org.jboss.netty.channel.ChannelHandlerContext;
+import org.jboss.netty.channel.ChannelStateEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
 import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * HttpDispatcher that invokes the appropriate http-handler method. The handler and the arguments are read
@@ -30,8 +29,6 @@ import org.slf4j.LoggerFactory;
  */
 
 public class HttpDispatcher extends SimpleChannelUpstreamHandler {
-
-  private static final Logger LOG = LoggerFactory.getLogger(HttpDispatcher.class);
 
   @Override
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
@@ -44,5 +41,11 @@ public class HttpDispatcher extends SimpleChannelUpstreamHandler {
     } else {
       super.messageReceived(ctx, e);
     }
+  }
+
+  @Override
+  public void channelDisconnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
+    HttpMethodInfo methodInfo  = (HttpMethodInfo) ctx.getPipeline().getContext("router").getAttachment();
+    methodInfo.disconnected();
   }
 }

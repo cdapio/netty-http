@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.channels.ClosedChannelException;
 
 /**
  * HttpMethodInfo is a helper class having state information about the http handler method to be invoked, the handler
@@ -110,6 +111,12 @@ class HttpMethodInfo {
     }
   }
 
+  void disconnected() {
+    if (bodyConsumer != null) {
+      bodyConsumerError(new ClosedChannelException());
+    }
+  }
+
   /**
    * Calls the {@link BodyConsumer#chunk(ChannelBuffer, HttpResponder)} method. If the chunk method call
    * throws exception, the {@link BodyConsumer#handleError(Throwable)} will be called and this method will
@@ -170,6 +177,9 @@ class HttpMethodInfo {
 
     // Send the status and message, followed by closing of the connection.
     responder.sendString(status, msg, ImmutableMultimap.of(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE));
+    if (bodyConsumer != null) {
+      bodyConsumerError(ex);
+    }
   }
 
   /**
