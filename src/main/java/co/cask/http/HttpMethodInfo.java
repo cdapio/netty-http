@@ -117,13 +117,6 @@ class HttpMethodInfo {
     }
   }
 
-
-  void exceptionCaught(Throwable cause) {
-    if (bodyConsumer != null) {
-      bodyConsumerError(cause);
-    }
-  }
-
   /**
    * Calls the {@link BodyConsumer#chunk(ChannelBuffer, HttpResponder)} method. If the chunk method call
    * throws exception, the {@link BodyConsumer#handleError(Throwable)} will be called and this method will
