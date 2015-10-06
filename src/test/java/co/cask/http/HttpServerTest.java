@@ -39,8 +39,6 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -54,13 +52,12 @@ import java.net.URI;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Test the HttpServer.
  */
 public class HttpServerTest {
-
-  private static final Logger LOG = LoggerFactory.getLogger(HttpServerTest.class);
 
   protected static final Type STRING_MAP_TYPE = new TypeToken<Map<String, String>>() { }.getType();
   protected static final Gson GSON = new Gson();
@@ -115,6 +112,84 @@ public class HttpServerTest {
   public static void teardown() throws Exception {
     service.stopAndWait();
   }
+
+  @Test
+  public void testUploadDisconnect() throws Exception {
+    File filePath = new File(tmpFolder.newFolder(), "test.txt");
+
+    URI uri = baseURI.resolve("/test/v1/stream/upload/file");
+    try (Socket socket = createRawSocket(uri.toURL())) {
+
+      // Make a PUT call through socket, so that we can close it prematurely
+      PrintStream printer = new PrintStream(socket.getOutputStream(), true, "UTF-8");
+      printer.print("PUT " + uri.getPath() + " HTTP/1.1\r\n");
+      printer.printf("Host: %s:%d\r\n", uri.getHost(), uri.getPort());
+      printer.print("Transfer-Encoding: chunked\r\n");
+      printer.print("File-Path: " + filePath.getAbsolutePath() + "\r\n");
+      printer.print("\r\n");
+
+      printer.print("5\r\n");
+      printer.print("12345\r\n");
+      printer.flush();
+
+      int counter = 0;
+      while (!filePath.exists() && counter < 100) {
+        TimeUnit.MILLISECONDS.sleep(100);
+        counter++;
+      }
+      Assert.assertTrue(counter < 100);
+      // close the socket prematurely
+    }
+
+    // The file should get removed because of incomplete request due to connection closed
+    int counter = 0;
+    while (filePath.exists() && counter < 50) {
+      TimeUnit.MILLISECONDS.sleep(100);
+      counter++;
+    }
+    Assert.assertTrue(counter < 50);
+  }
+
+  @Test
+  public void testUploadError() throws Exception {
+    File filePath = new File(tmpFolder.newFolder(), "test.txt");
+
+    URI uri = baseURI.resolve("/test/v1/stream/upload/file");
+    try (Socket socket = createRawSocket(uri.toURL())) {
+
+      // Make a PUT call through socket, so that we can send invalid chunks
+      PrintStream printer = new PrintStream(socket.getOutputStream(), true, "UTF-8");
+      printer.print("PUT " + uri.getPath() + " HTTP/1.1\r\n");
+      printer.printf("Host: %s:%d\r\n", uri.getHost(), uri.getPort());
+      printer.print("Transfer-Encoding: chunked\r\n");
+      printer.print("File-Path: " + filePath.getAbsolutePath() + "\r\n");
+      printer.print("\r\n");
+
+      printer.print("5\r\n");
+      printer.print("12345\r\n");
+      printer.flush();
+
+      int counter = 0;
+      while (!filePath.exists() && counter < 100) {
+        TimeUnit.MILLISECONDS.sleep(100);
+        counter++;
+      }
+      Assert.assertTrue(counter < 100);
+
+      // Send an invalid chunk
+      printer.print("xyz\r\n");
+      printer.flush();
+
+      // The file should get removed because of invalid chunk
+      counter = 0;
+      while (filePath.exists() && counter < 50) {
+        TimeUnit.MILLISECONDS.sleep(100);
+        counter++;
+      }
+      Assert.assertTrue(counter < 50);
+    }
+  }
+
 
   @Test
   public void testValidEndPoints() throws IOException {
@@ -446,7 +521,7 @@ public class HttpServerTest {
     Assert.assertEquals(30, json.get("age").getAsLong());
     Assert.assertEquals("hello", json.get("name").getAsString());
     Assert.assertEquals(ImmutableList.of("casking"),
-                        GSON.fromJson(json.get("hobby").getAsJsonArray(), hobbyType));
+                        GSON.<List<String>>fromJson(json.get("hobby").getAsJsonArray(), hobbyType));
 
     urlConn.disconnect();
   }
@@ -457,8 +532,7 @@ public class HttpServerTest {
 
     // Fire http request using raw socket so that we can verify the connection get closed by the server
     // after the response.
-    Socket socket = createRawSocket(url);
-    try {
+    try (Socket socket = createRawSocket(url)) {
       PrintStream printer = new PrintStream(socket.getOutputStream(), false, "UTF-8");
       printer.printf("GET %s HTTP/1.1\r\n", url.getPath());
       printer.printf("Host: %s:%d\r\n", url.getHost(), url.getPort());
@@ -469,8 +543,6 @@ public class HttpServerTest {
       // end with an EOF. Otherwise there will be timeout of this test case
       String response = CharStreams.toString(new InputStreamReader(socket.getInputStream(), Charsets.UTF_8));
       Assert.assertTrue(response.startsWith("HTTP/1.1 200 OK"));
-    } finally {
-      socket.close();
     }
   }
 

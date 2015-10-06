@@ -21,6 +21,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMultimap;
+import com.google.common.io.Closeables;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -29,8 +30,12 @@ import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Assert;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
@@ -277,6 +282,41 @@ public class TestHandler implements HttpHandler {
       @Override
       public void handleError(Throwable cause) {
         offHeapBuffer = null;
+      }
+    };
+  }
+
+  @Path("/stream/upload/file")
+  @PUT
+  public BodyConsumer streamUploadFile(HttpRequest request, HttpResponder responder) throws FileNotFoundException {
+    final File file = new File(request.getHeader("File-Path"));
+    final FileChannel channel = new FileOutputStream(file).getChannel();
+
+    return new BodyConsumer() {
+      @Override
+      public void chunk(ChannelBuffer request, HttpResponder responder) {
+        try {
+          System.out.println("chunk received: " + request.readableBytes());
+          channel.write(request.toByteBuffer());
+        } catch (IOException e) {
+          throw Throwables.propagate(e);
+        }
+      }
+
+      @Override
+      public void finished(HttpResponder responder) {
+        try {
+          channel.close();
+          responder.sendStatus(HttpResponseStatus.OK);
+        } catch (IOException e) {
+          throw Throwables.propagate(e);
+        }
+      }
+
+      @Override
+      public void handleError(Throwable cause) {
+        Closeables.closeQuietly(channel);
+        file.delete();
       }
     };
   }
