@@ -22,3 +22,5 @@ jdk:
 branches:
   only:
     - develop
+
+script: mvn test -Dsurefire.redirectTestOutputToFile=false
