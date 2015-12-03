@@ -26,6 +26,7 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Assert;
@@ -34,11 +35,13 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
@@ -339,6 +342,44 @@ public class TestHandler implements HttpHandler {
       chunker.sendChunk(content.readSlice(1));
     }
     chunker.close();
+  }
+
+  @Path("/produceBody")
+  @GET
+  public void produceBody(HttpRequest request, HttpResponder responder,
+                          @QueryParam("chunk") final String chunk,
+                          @QueryParam("repeat") final int repeat,
+                          @QueryParam("successFile") final String successFile,
+                          @QueryParam("failureFile") final String failureFile) throws IOException {
+    responder.sendContent(HttpResponseStatus.OK, new BodyProducer() {
+      int times = 0;
+
+      @Override
+      public ChannelBuffer nextChunk() {
+        if (times < repeat) {
+          return ChannelBuffers.wrappedBuffer(Charsets.UTF_8.encode(chunk + " " + times++));
+        }
+        return ChannelBuffers.EMPTY_BUFFER;
+      }
+
+      @Override
+      public void finished() throws Exception {
+        if (!new File(successFile).createNewFile()) {
+          throw new IOException("Failed to create new file");
+        }
+      }
+
+      @Override
+      public void handleError(@Nullable Throwable cause) {
+        try (PrintStream printer = new PrintStream(new FileOutputStream(new File(failureFile)), true)) {
+          if (cause != null) {
+            cause.printStackTrace(printer);
+          }
+        } catch (FileNotFoundException e) {
+          throw Throwables.propagate(e);
+        }
+      }
+    }, ImmutableMultimap.<String, String>of());
   }
 
   @Path("/uexception")

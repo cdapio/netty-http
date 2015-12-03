@@ -16,20 +16,27 @@
 
 package co.cask.http;
 
+import com.google.common.base.Charsets;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.DefaultFileRegion;
 import org.jboss.netty.channel.FileRegion;
+import org.jboss.netty.handler.codec.http.DefaultHttpChunk;
 import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
+import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpHeaders;
 import org.jboss.netty.handler.codec.http.HttpResponse;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.jboss.netty.handler.codec.http.HttpVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -45,6 +52,8 @@ import javax.annotation.Nullable;
  * back to the client in json format.
  */
 public class BasicHttpResponder extends AbstractHttpResponder {
+
+  private static final Logger LOG = LoggerFactory.getLogger(BasicHttpResponder.class);
 
   private final Channel channel;
   private final boolean keepAlive;
@@ -63,9 +72,11 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
 
     setCustomHeaders(response, headers);
-
     response.setChunked(true);
-    response.setHeader(HttpHeaders.Names.TRANSFER_ENCODING, HttpHeaders.Values.CHUNKED);
+
+    if (!hasContentLength(headers)) {
+      response.setHeader(HttpHeaders.Names.TRANSFER_ENCODING, HttpHeaders.Values.CHUNKED);
+    }
 
     boolean responseKeepAlive = setResponseKeepAlive(response);
     channel.write(response);
@@ -130,6 +141,120 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     }
   }
 
+  @Override
+  public void sendContent(HttpResponseStatus status, final BodyProducer bodyProducer,
+                          @Nullable Multimap<String, String> headers) {
+    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
+    final long contentLength;
+    try {
+      contentLength = bodyProducer.getContentLength();
+    } catch (Throwable t) {
+      // Response with error and close the connection
+      sendContent(HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                  ChannelBuffers.wrappedBuffer(
+                    Charsets.UTF_8.encode("Failed to determined content length. Cause: " + t.getMessage())),
+                  "text/plain",
+                  ImmutableMultimap.of(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE));
+      return;
+    }
+
+    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+    setCustomHeaders(response, headers);
+    response.setChunked(true);
+
+    if (contentLength < 0L) {
+      response.setHeader(HttpHeaders.Names.TRANSFER_ENCODING, HttpHeaders.Values.CHUNKED);
+      response.removeHeader(HttpHeaders.Names.CONTENT_LENGTH);
+    } else {
+      response.setHeader(HttpHeaders.Names.CONTENT_LENGTH, contentLength);
+      response.removeHeader(HttpHeaders.Names.TRANSFER_ENCODING);
+    }
+
+    boolean responseKeepAlive = setResponseKeepAlive(response);
+    final ChannelFutureListener completionListener = createBodyProducerCompletionListener(bodyProducer,
+                                                                                          responseKeepAlive);
+    // Streams the data produced by the given BodyProducer
+    channel.write(response).addListener(new ChannelFutureListener() {
+
+      long size = 0;
+
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if (!future.isSuccess()) {
+          callBodyProducerHandleError(bodyProducer, future.getCause());
+          channel.close();
+          return;
+        }
+
+        try {
+          HttpChunk chunk = new DefaultHttpChunk(bodyProducer.nextChunk());
+          if (contentLength >= 0) {
+            size += chunk.getContent().readableBytes();
+            if (size > contentLength) {
+              callBodyProducerHandleError(bodyProducer,
+                                          new IllegalStateException("Cannot write body longer than content length. " +
+                                                                      "Content-Length: " + contentLength +
+                                                                      ", bytes produced: " + size));
+              channel.close();
+              return;
+            }
+            if (chunk.isLast() && size != contentLength) {
+              callBodyProducerHandleError(bodyProducer,
+                                          new IllegalStateException("Body size doesn't match with content length. " +
+                                                                      "Content-Length: " + contentLength +
+                                                                      ", bytes produced: " + size));
+              channel.close();
+              return;
+            }
+          }
+
+          ChannelFuture writeFuture = channel.write(chunk);
+          if (chunk.isLast()) {
+            writeFuture.addListener(completionListener);
+          } else {
+            writeFuture.addListener(this);
+          }
+
+        } catch (Throwable t) {
+          callBodyProducerHandleError(bodyProducer, t);
+          channel.close();
+        }
+      }
+    });
+  }
+
+  private void callBodyProducerHandleError(BodyProducer bodyProducer, @Nullable Throwable failureCause) {
+    try {
+      bodyProducer.handleError(failureCause);
+    } catch (Throwable t) {
+      LOG.warn("Exception raised from BodyProducer.handleError() for {}", bodyProducer, t);
+    }
+  }
+
+  private ChannelFutureListener createBodyProducerCompletionListener(final BodyProducer bodyProducer,
+                                                                     final boolean responseKeepAlive) {
+    return new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if (!future.isSuccess()) {
+          callBodyProducerHandleError(bodyProducer, future.getCause());
+          channel.close();
+          return;
+        }
+
+        try {
+          bodyProducer.finished();
+          if (!responseKeepAlive) {
+            channel.close();
+          }
+        } catch (Throwable t) {
+          callBodyProducerHandleError(bodyProducer, t);
+          channel.close();
+        }
+      }
+    };
+  }
+
   private void setCustomHeaders(HttpResponse response, @Nullable Multimap<String, String> headers) {
     // Add headers. They will override all headers set by the framework
     if (headers != null) {
@@ -150,5 +275,20 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     }
 
     return responseKeepAlive;
+  }
+
+  /**
+   * Returns true if the {@code Content-Length} header is set.
+   */
+  private boolean hasContentLength(@Nullable Multimap<String, String> headers) {
+    if (headers == null) {
+      return false;
+    }
+    for (String key : headers.keySet()) {
+      if (HttpHeaders.Names.CONTENT_LENGTH.equalsIgnoreCase(key)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

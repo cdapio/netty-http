@@ -52,9 +52,9 @@ import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -62,7 +62,10 @@ import java.util.concurrent.TimeUnit;
  */
 public class HttpServerTest {
 
+  @ClassRule
+  public static final TemporaryFolder TEMP_FOLDER = new TemporaryFolder();
   private static final Logger LOG = LoggerFactory.getLogger(HttpServerTest.class);
+
   protected static final Type STRING_MAP_TYPE = new TypeToken<Map<String, String>>() { }.getType();
   protected static final Gson GSON = new Gson();
   protected static final ExceptionHandler EXCEPTION_HANDLER = new ExceptionHandler() {
@@ -639,6 +642,32 @@ public class HttpServerTest {
     Files.copy(fname, urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.getCode(), urlConn.getResponseCode());
     urlConn.disconnect();
+  }
+
+  @Test
+  public void testBodyProducer() throws Exception {
+    String chunk = "Message";
+    int repeat = 100;
+    File resultFolder = TEMP_FOLDER.newFolder();
+    File successFile = new File(resultFolder, "success");
+    File failureFile = new File(resultFolder, "failure");
+
+    HttpURLConnection urlConn = request("/test/v1/produceBody?chunk=" + URLEncoder.encode(chunk, "UTF-8") +
+                                          "&repeat=" + repeat +
+                                          "&successFile=" + URLEncoder.encode(successFile.getAbsolutePath(), "UTF-8") +
+                                          "&failureFile=" + URLEncoder.encode(failureFile.getAbsolutePath(), "UTF-8"),
+                                        HttpMethod.GET);
+    Assert.assertEquals(HttpResponseStatus.OK.getCode(), urlConn.getResponseCode());
+
+    String body = CharStreams.toString(new InputStreamReader(urlConn.getInputStream(), "UTF-8"));
+    StringBuilder expected = new StringBuilder();
+    for (int i = 0; i < repeat; i++) {
+      expected.append(chunk).append(" ").append(i);
+    }
+    Assert.assertEquals(expected.toString(), body);
+
+    Assert.assertTrue(successFile.isFile());
+    Assert.assertFalse(failureFile.isFile());
   }
 
   protected Socket createRawSocket(URL url) throws IOException {
