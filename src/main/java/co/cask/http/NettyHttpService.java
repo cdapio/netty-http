@@ -40,6 +40,7 @@ import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
 import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
 import org.jboss.netty.handler.execution.ExecutionHandler;
 import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
+import org.jboss.netty.util.internal.ExecutorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,6 +78,7 @@ public final class NettyHttpService extends AbstractIdleService {
   private final SSLHandlerFactory sslHandlerFactory;
 
   private ServerBootstrap bootstrap;
+  private ExecutionHandler executionHandler;
   private InetSocketAddress bindAddress;
 
   /**
@@ -164,7 +166,7 @@ public final class NettyHttpService extends AbstractIdleService {
 
       @Override
       public Thread newThread(Runnable r) {
-        Thread t = new Thread(threadGroup, r, String.format("executor-%d", count.getAndIncrement()));
+        Thread t = new Thread(threadGroup, r, String.format("netty-executor-%d", count.getAndIncrement()));
         t.setDaemon(true);
         return t;
       }
@@ -191,19 +193,18 @@ public final class NettyHttpService extends AbstractIdleService {
    */
   private void bootStrap(int threadPoolSize, long threadKeepAliveSecs) throws Exception {
 
-    final ExecutionHandler executionHandler = (threadPoolSize) > 0 ?
-      createExecutionHandler(threadPoolSize, threadKeepAliveSecs) : null;
+    executionHandler = (threadPoolSize) > 0 ? createExecutionHandler(threadPoolSize, threadKeepAliveSecs) : null;
 
     Executor bossExecutor = Executors.newFixedThreadPool(bossThreadPoolSize,
                                                          new ThreadFactoryBuilder()
                                                            .setDaemon(true)
-                                                           .setNameFormat("netty-boss-thread")
+                                                           .setNameFormat("netty-boss-thread-%d")
                                                            .build());
 
     Executor workerExecutor = Executors.newFixedThreadPool(workerThreadPoolSize,
                                                            new ThreadFactoryBuilder()
                                                              .setDaemon(true)
-                                                             .setNameFormat("netty-worker-thread")
+                                                             .setNameFormat("netty-worker-thread-%d")
                                                              .build());
 
     //Server bootstrap with default worker threads (2 * number of cores)
@@ -272,14 +273,18 @@ public final class NettyHttpService extends AbstractIdleService {
   @Override
   protected void shutDown() throws Exception {
     LOG.info("Stopping service on address {}...", bindAddress);
-    bootstrap.shutdown();
     try {
+      bootstrap.shutdown();
       if (!channelGroup.close().await(CLOSE_CHANNEL_TIMEOUT, TimeUnit.SECONDS)) {
         LOG.warn("Timeout when closing all channels.");
       }
     } finally {
       resourceHandler.destroy(handlerContext);
       bootstrap.releaseExternalResources();
+      if (executionHandler != null) {
+        executionHandler.releaseExternalResources();
+        ExecutorUtil.terminate(executionHandler.getExecutor());
+      }
     }
     LOG.info("Done stopping service on address {}", bindAddress);
   }

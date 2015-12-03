@@ -39,6 +39,8 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -52,6 +54,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -59,6 +62,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class HttpServerTest {
 
+  private static final Logger LOG = LoggerFactory.getLogger(HttpServerTest.class);
   protected static final Type STRING_MAP_TYPE = new TypeToken<Map<String, String>>() { }.getType();
   protected static final Gson GSON = new Gson();
   protected static final ExceptionHandler EXCEPTION_HANDLER = new ExceptionHandler() {
@@ -111,6 +115,22 @@ public class HttpServerTest {
   @AfterClass
   public static void teardown() throws Exception {
     service.stopAndWait();
+
+    // After service shutdown, there shouldn't be any netty threads (NETTY-10)
+    boolean passed = false;
+    for (int i = 0; i < 20 && !passed; i++) {
+      for (Thread t : Thread.getAllStackTraces().keySet()) {
+        String name = t.getName();
+        passed = !(name.startsWith("netty-executor-")
+          || name.startsWith("New I/O worker")
+          || name.startsWith("New I/O server"));
+        if (!passed) {
+          LOG.info("Live thread: {}", t.getName());
+          break;
+        }
+      }
+      TimeUnit.MILLISECONDS.sleep(100);
+    }
   }
 
   @Test

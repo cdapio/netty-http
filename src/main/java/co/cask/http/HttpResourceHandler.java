@@ -353,7 +353,11 @@ public final class HttpResourceHandler implements HttpHandler {
   @Override
   public void destroy(HandlerContext context) {
     for (HttpHandler handler : handlers) {
-      handler.destroy(context);
+      try {
+        handler.destroy(context);
+      } catch (Throwable t) {
+        LOG.warn("Exception raised in calling handler.destroy() for handler {}", handler, t);
+      }
     }
   }
 }
