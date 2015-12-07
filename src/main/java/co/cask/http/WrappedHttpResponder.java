@@ -139,6 +139,13 @@ final class WrappedHttpResponder implements HttpResponder {
     runHook(HttpResponseStatus.OK);
   }
 
+  @Override
+  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer,
+                          @Nullable Multimap<String, String> headers) {
+    delegate.sendContent(status, bodyProducer, headers);
+    runHook(status);
+  }
+
   private void runHook(HttpResponseStatus status) {
     for (HandlerHook hook : handlerHooks) {
       try {

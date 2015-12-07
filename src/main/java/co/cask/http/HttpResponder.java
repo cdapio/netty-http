@@ -137,4 +137,15 @@ public interface HttpResponder {
    * @param headers Headers to be sent back.
    */
   void sendFile(File file, @Nullable Multimap<String, String> headers);
+
+  /**
+   * Sends response back to client. The response body is produced by the given {@link BodyProducer}. This method
+   * will return immediate after it is called. Invocation of methods on the given {@link BodyProducer} will be
+   * triggered from another thread.
+   *
+   * @param status Status of the response.
+   * @param bodyProducer a {@link BodyProducer} to produce response body.
+   * @param headers headers to be sent back.
+   */
+  void sendContent(HttpResponseStatus status, BodyProducer bodyProducer, @Nullable Multimap<String, String> headers);
 }

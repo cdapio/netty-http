@@ -23,6 +23,8 @@ import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,6 +37,8 @@ import javax.annotation.Nullable;
  * is no need to go through the network.  It stores the status code and content in memory and returns them when asked.
  */
 public class InternalHttpResponder extends AbstractHttpResponder {
+
+  private static final Logger LOG = LoggerFactory.getLogger(InternalHttpResponder.class);
 
   private int statusCode;
   private InputSupplier<? extends InputStream> inputSupplier;
@@ -86,6 +90,30 @@ public class InternalHttpResponder extends AbstractHttpResponder {
   public void sendFile(File file, @Nullable Multimap<String, String> headers) {
     statusCode = HttpResponseStatus.OK.getCode();
     inputSupplier = Files.newInputStreamSupplier(file);
+  }
+
+  @Override
+  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer,
+                          @Nullable Multimap<String, String> headers) {
+    statusCode = status.getCode();
+    // Buffer all contents produced by the body producer
+    ChannelBuffer contentChunks = ChannelBuffers.EMPTY_BUFFER;
+    try {
+      ChannelBuffer chunk = bodyProducer.nextChunk();
+      while (chunk.readable()) {
+        contentChunks = ChannelBuffers.wrappedBuffer(contentChunks, chunk);
+        chunk = bodyProducer.nextChunk();
+      }
+
+      bodyProducer.finished();
+      inputSupplier = createContentSupplier(contentChunks);
+    } catch (Throwable t) {
+      try {
+        bodyProducer.handleError(t);
+      } catch (Throwable et) {
+        LOG.warn("Exception raised from BodyProducer.handleError() for {}", bodyProducer, et);
+      }
+    }
   }
 
   public InternalHttpResponse getResponse() {
