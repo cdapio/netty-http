@@ -134,9 +134,7 @@ public class RequestRouter extends SimpleChannelUpstreamHandler {
   public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent e) {
     String exceptionMessage = "Exception caught in channel processing.";
     Throwable cause = e.getCause();
-    if (!exceptionRaised.get()) {
-      exceptionRaised.set(true);
-
+    if (exceptionRaised.compareAndSet(false, true)) {
       if (methodInfo != null) {
         LOG.error(exceptionMessage, cause);
         methodInfo.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, cause);
