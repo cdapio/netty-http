@@ -67,7 +67,6 @@ public class BasicHttpResponder extends AbstractHttpResponder {
 
   @Override
   public ChunkResponder sendChunkStart(HttpResponseStatus status, @Nullable Multimap<String, String> headers) {
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     Preconditions.checkArgument((status.getCode() >= 200 && status.getCode() < 210) , "Http Chunk Failure");
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
 
@@ -79,6 +78,7 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     }
 
     boolean responseKeepAlive = setResponseKeepAlive(response);
+    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     channel.write(response);
     return new ChannelChunkResponder(channel, responseKeepAlive);
   }
@@ -86,7 +86,6 @@ public class BasicHttpResponder extends AbstractHttpResponder {
   @Override
   public void sendContent(HttpResponseStatus status, @Nullable ChannelBuffer content, String contentType,
                           @Nullable Multimap<String, String> headers) {
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
 
     setCustomHeaders(response, headers);
@@ -100,6 +99,7 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     }
 
     boolean responseKeepAlive = setResponseKeepAlive(response);
+    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     ChannelFuture future = channel.write(response);
     if (!responseKeepAlive) {
       future.addListener(ChannelFutureListener.CLOSE);
@@ -108,13 +108,14 @@ public class BasicHttpResponder extends AbstractHttpResponder {
 
   @Override
   public void sendFile(File file, @Nullable Multimap<String, String> headers) {
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
 
     setCustomHeaders(response, headers);
     response.setHeader(HttpHeaders.Names.CONTENT_LENGTH, file.length());
 
     final boolean responseKeepAlive = setResponseKeepAlive(response);
+
+    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
 
     // Write the initial line and the header.
     channel.write(response);
@@ -144,11 +145,11 @@ public class BasicHttpResponder extends AbstractHttpResponder {
   @Override
   public void sendContent(HttpResponseStatus status, final BodyProducer bodyProducer,
                           @Nullable Multimap<String, String> headers) {
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
     final long contentLength;
     try {
       contentLength = bodyProducer.getContentLength();
     } catch (Throwable t) {
+      bodyProducer.handleError(t);
       // Response with error and close the connection
       sendContent(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                   ChannelBuffers.wrappedBuffer(
@@ -173,6 +174,9 @@ public class BasicHttpResponder extends AbstractHttpResponder {
     boolean responseKeepAlive = setResponseKeepAlive(response);
     final ChannelFutureListener completionListener = createBodyProducerCompletionListener(bodyProducer,
                                                                                           responseKeepAlive);
+
+    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
+
     // Streams the data produced by the given BodyProducer
     channel.write(response).addListener(new ChannelFutureListener() {
 
