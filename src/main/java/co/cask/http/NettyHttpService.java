@@ -20,6 +20,7 @@ import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -40,11 +41,14 @@ import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
 import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
 import org.jboss.netty.handler.execution.ExecutionHandler;
 import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
+import org.jboss.netty.util.ThreadNameDeterminer;
+import org.jboss.netty.util.ThreadRenamingRunnable;
 import org.jboss.netty.util.internal.ExecutorUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -64,6 +68,8 @@ public final class NettyHttpService extends AbstractIdleService {
   private static final Logger LOG = LoggerFactory.getLogger(NettyHttpService.class);
 
   private static final int CLOSE_CHANNEL_TIMEOUT = 5;
+
+  private final String serviceName;
   private final int bossThreadPoolSize;
   private final int workerThreadPoolSize;
   private final int execThreadPoolSize;
@@ -82,34 +88,9 @@ public final class NettyHttpService extends AbstractIdleService {
   private InetSocketAddress bindAddress;
 
   /**
-   * Initialize NettyHttpService.
-   * @param bindAddress Address for the service to bind to.
-   * @param bossThreadPoolSize Size of the boss thread pool.
-   * @param workerThreadPoolSize Size of the worker thread pool.
-   * @param execThreadPoolSize Size of the thread pool for the executor.
-   * @param execThreadKeepAliveSecs  maximum time that excess idle threads will wait for new tasks before terminating.
-   * @param channelConfigs Configurations for the server socket channel.
-   * @param rejectedExecutionHandler rejection policy for executor.
-   * @param urlRewriter URLRewriter to rewrite incoming URLs.
-   * @param httpHandlers HttpHandlers to handle the calls.
-   * @param handlerHooks Hooks to be called before/after request processing by httpHandlers.
-   *
-   * @deprecated Use {@link NettyHttpService.Builder} instead.
-   */
-  @Deprecated
-  public NettyHttpService(InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
-                          int execThreadPoolSize, long execThreadKeepAliveSecs,
-                          Map<String, Object> channelConfigs,
-                          RejectedExecutionHandler rejectedExecutionHandler, URLRewriter urlRewriter,
-                          Iterable<? extends HttpHandler> httpHandlers,
-                          Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit) {
-    this(bindAddress, bossThreadPoolSize, workerThreadPoolSize, execThreadPoolSize, execThreadKeepAliveSecs,
-         channelConfigs, rejectedExecutionHandler, urlRewriter, httpHandlers, handlerHooks, httpChunkLimit,
-         null, null, new ExceptionHandler());
-  }
-
-  /**
    * Initialize NettyHttpService. Also includes SSL implementation.
+   *
+   * @param serviceName name of this service. Threads created for this service will be prefixed with the given name.
    * @param bindAddress Address for the service to bind to.
    * @param bossThreadPoolSize Size of the boss thread pool.
    * @param workerThreadPoolSize Size of the worker thread pool.
@@ -124,7 +105,8 @@ public final class NettyHttpService extends AbstractIdleService {
    * @param sslHandlerFactory Object used to share SSL certificate details
    * @param exceptionHandler Handles exceptions from calling handler methods
    */
-  private NettyHttpService(InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
+  private NettyHttpService(String serviceName,
+                           InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
                            int execThreadPoolSize, long execThreadKeepAliveSecs,
                            Map<String, Object> channelConfigs,
                            RejectedExecutionHandler rejectedExecutionHandler, URLRewriter urlRewriter,
@@ -132,6 +114,7 @@ public final class NettyHttpService extends AbstractIdleService {
                            Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit,
                            Function<ChannelPipeline, ChannelPipeline> pipelineModifier,
                            SSLHandlerFactory sslHandlerFactory, ExceptionHandler exceptionHandler) {
+    this.serviceName = serviceName;
     this.bindAddress = bindAddress;
     this.bossThreadPoolSize = bossThreadPoolSize;
     this.workerThreadPoolSize = workerThreadPoolSize;
@@ -159,14 +142,13 @@ public final class NettyHttpService extends AbstractIdleService {
    * @return instance of {@code ExecutionHandler}.
    */
   private ExecutionHandler createExecutionHandler(int threadPoolSize, long threadKeepAliveSecs) {
-
     ThreadFactory threadFactory = new ThreadFactory() {
-      private final ThreadGroup threadGroup = new ThreadGroup("netty-executor-thread");
+      private final ThreadGroup threadGroup = new ThreadGroup(serviceName + "-executor-thread");
       private final AtomicLong count = new AtomicLong(0);
 
       @Override
       public Thread newThread(Runnable r) {
-        Thread t = new Thread(threadGroup, r, String.format("netty-executor-%d", count.getAndIncrement()));
+        Thread t = new Thread(threadGroup, r, String.format("%s-executor-%d", serviceName, count.getAndIncrement()));
         t.setDaemon(true);
         return t;
       }
@@ -192,19 +174,21 @@ public final class NettyHttpService extends AbstractIdleService {
    * @param threadKeepAliveSecs  maximum time that excess idle threads will wait for new tasks before terminating.
    */
   private void bootStrap(int threadPoolSize, long threadKeepAliveSecs) throws Exception {
+    // Make Netty uses the current name (i.e. the thread name as created by the executor) to name the threads.
+    ThreadRenamingRunnable.setThreadNameDeterminer(ThreadNameDeterminer.CURRENT);
 
     executionHandler = (threadPoolSize) > 0 ? createExecutionHandler(threadPoolSize, threadKeepAliveSecs) : null;
 
     Executor bossExecutor = Executors.newFixedThreadPool(bossThreadPoolSize,
                                                          new ThreadFactoryBuilder()
                                                            .setDaemon(true)
-                                                           .setNameFormat("netty-boss-thread-%d")
+                                                           .setNameFormat(serviceName + "-boss-thread-%d")
                                                            .build());
 
     Executor workerExecutor = Executors.newFixedThreadPool(workerThreadPoolSize,
                                                            new ThreadFactoryBuilder()
                                                              .setDaemon(true)
-                                                             .setNameFormat("netty-worker-thread-%d")
+                                                             .setNameFormat(serviceName + "-worker-thread-%d")
                                                              .build());
 
     //Server bootstrap with default worker threads (2 * number of cores)
@@ -249,18 +233,33 @@ public final class NettyHttpService extends AbstractIdleService {
     });
   }
 
+  /**
+   * Creates a {@link Builder} for creating new instance of {@link NettyHttpService}.
+   *
+   * @deprecated Use {@link #builder(String)} instead.
+   */
+  @Deprecated
   public static Builder builder() {
     return new Builder();
   }
 
+  /**
+   * Creates a {@link Builder} for creating new instance of {@link NettyHttpService}.
+   *
+   * @param serviceName name of the http service. The name will be used to name threads created for the service.
+   */
+  public static Builder builder(String serviceName) {
+    return new Builder(serviceName);
+  }
+
   @Override
   protected void startUp() throws Exception {
-    LOG.info("Starting service on address {}...", bindAddress);
+    LOG.info("Starting {} http service on address {}...", serviceName, bindAddress);
     bootStrap(execThreadPoolSize, execThreadKeepAliveSecs);
     Channel channel = bootstrap.bind(bindAddress);
     channelGroup.add(channel);
     bindAddress = ((InetSocketAddress) channel.getLocalAddress());
-    LOG.info("Started service on address {}", bindAddress);
+    LOG.info("Started {} http service on address {}", serviceName, bindAddress);
   }
 
   /**
@@ -272,7 +271,7 @@ public final class NettyHttpService extends AbstractIdleService {
 
   @Override
   protected void shutDown() throws Exception {
-    LOG.info("Stopping service on address {}...", bindAddress);
+    LOG.info("Stopping {} http service on address {}...", serviceName, bindAddress);
     try {
       bootstrap.shutdown();
       if (!channelGroup.close().await(CLOSE_CHANNEL_TIMEOUT, TimeUnit.SECONDS)) {
@@ -286,7 +285,7 @@ public final class NettyHttpService extends AbstractIdleService {
         ExecutorUtil.terminate(executionHandler.getExecutor());
       }
     }
-    LOG.info("Done stopping service on address {}", bindAddress);
+    LOG.info("Stopped {} http service on address {}", serviceName, bindAddress);
   }
 
   /**
@@ -303,6 +302,7 @@ public final class NettyHttpService extends AbstractIdleService {
       new ThreadPoolExecutor.CallerRunsPolicy();
     private static final int DEFAULT_HTTP_CHUNK_LIMIT = 150 * 1024 * 1024;
 
+    private final String serviceName;
     private final Map<String, Object> channelConfigs;
 
     private Iterable<? extends HttpHandler> handlers;
@@ -321,7 +321,14 @@ public final class NettyHttpService extends AbstractIdleService {
     private ExceptionHandler exceptionHandler;
 
     // Protected constructor to prevent instantiating Builder instance directly.
+    @Deprecated
     protected Builder() {
+      this(getCallerClassName());
+    }
+
+    // Protected constructor to prevent instantiating Builder instance directly.
+    protected Builder(String serviceName) {
+      this.serviceName = serviceName;
       bossThreadPoolSize = DEFAULT_BOSS_THREAD_POOL_SIZE;
       workerThreadPoolSize = DEFAULT_WORKER_THREAD_POOL_SIZE;
       execThreadPoolSize = DEFAULT_EXEC_HANDLER_THREAD_POOL_SIZE;
@@ -333,6 +340,23 @@ public final class NettyHttpService extends AbstractIdleService {
       channelConfigs.put("backlog", DEFAULT_CONNECTION_BACKLOG);
       sslHandlerFactory = null;
       exceptionHandler = new ExceptionHandler();
+    }
+
+    /**
+     * Returns the simple class name of the first caller that is different than the {@link NettyHttpService} class.
+     * This method is for backward compatibility. Will be removed once the deprecated {@link #Builder()} is removed.
+     */
+    private static String getCallerClassName() {
+      // Get the stacktrace and determine the caller class. We skip the first one because it's always
+      // Thread.getStackTrace().
+      for (StackTraceElement element : Iterables.skip(Arrays.asList(Thread.currentThread().getStackTrace()), 1)) {
+        if (!element.getClassName().startsWith(NettyHttpService.class.getName())) {
+          String className = element.getClassName();
+          int idx = className.lastIndexOf('.');
+          return idx > 0 ? className.substring(idx + 1) : className;
+        }
+      }
+      return "netty-http";
     }
 
     /**
@@ -516,7 +540,7 @@ public final class NettyHttpService extends AbstractIdleService {
         bindAddress = new InetSocketAddress(host, port);
       }
 
-      return new NettyHttpService(bindAddress, bossThreadPoolSize, workerThreadPoolSize,
+      return new NettyHttpService(serviceName, bindAddress, bossThreadPoolSize, workerThreadPoolSize,
                                   execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, rejectedExecutionHandler,
                                   urlRewriter, handlers, handlerHooks, httpChunkLimit, pipelineModifier,
                                   sslHandlerFactory, exceptionHandler);

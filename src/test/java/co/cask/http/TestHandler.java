@@ -299,7 +299,6 @@ public class TestHandler implements HttpHandler {
       @Override
       public void chunk(ChannelBuffer request, HttpResponder responder) {
         try {
-          System.out.println("chunk received: " + request.readableBytes());
           channel.write(request.toByteBuffer());
         } catch (IOException e) {
           throw Throwables.propagate(e);
