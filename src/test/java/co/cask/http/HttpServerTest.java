@@ -666,6 +666,10 @@ public class HttpServerTest {
     }
     Assert.assertEquals(expected.toString(), body);
 
+    int count = 0;
+    while (!successFile.isFile() && count++ < 10) {
+      TimeUnit.MILLISECONDS.sleep(10);
+    }
     Assert.assertTrue(successFile.isFile());
     Assert.assertFalse(failureFile.isFile());
   }
