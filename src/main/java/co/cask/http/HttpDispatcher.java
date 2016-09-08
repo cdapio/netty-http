@@ -46,6 +46,8 @@ public class HttpDispatcher extends SimpleChannelUpstreamHandler {
   @Override
   public void channelDisconnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
     HttpMethodInfo methodInfo  = (HttpMethodInfo) ctx.getPipeline().getContext("router").getAttachment();
-    methodInfo.disconnected();
+    if (methodInfo != null) {
+      methodInfo.disconnected();
+    }
   }
 }
