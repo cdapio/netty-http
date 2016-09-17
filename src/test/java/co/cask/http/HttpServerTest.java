@@ -474,6 +474,17 @@ public class HttpServerTest {
   }
 
   @Test
+  public void testMultiMatchFooBarParamId1() throws Exception {
+    testContent("/test/v1/multi-match/foo/p/bar/baz", "multi-match-foo-param-bar-baz-p");
+  }
+
+  @Test
+  public void testAppVersion() throws Exception {
+    testContent("/test/v1/apps/app1/versions/v1/create", "new");
+    testContent("/test/v1/apps/app1/flows/flow1/start", "old");
+  }
+
+  @Test
   public void testMultiMatchFooPut() throws Exception {
     testContent("/test/v1/multi-match/foo", "multi-match-put-actual-foo", HttpMethod.PUT);
   }

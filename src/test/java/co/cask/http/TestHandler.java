@@ -235,6 +235,18 @@ public class TestHandler implements HttpHandler {
     responder.sendString(HttpResponseStatus.OK, "multi-match-foo-bar-param-" + param + "-id-" + id);
   }
 
+  @Path("/apps/{app-id}/versions/{version-id}/create")
+  @GET
+  public void appVersion(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "new");
+  }
+
+  @Path("/apps/{app-id}/{type}/{id}/{action}")
+  @GET
+  public void appVersionOld(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "old");
+  }
+
   @Path("/stream/upload")
   @PUT
   public BodyConsumer streamUpload(HttpRequest request, HttpResponder responder) {

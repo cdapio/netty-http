@@ -39,6 +39,9 @@ public class PathRouterTest {
     pathRouter.add("/foo/bar", "foobar");
     pathRouter.add("//multiple/slash//route", "multipleslashroute");
 
+    pathRouter.add("/abc/bar", "abc-bar");
+    pathRouter.add("/abc/{type}/{id}", "abc-type-id");
+
     pathRouter.add("/multi/match/**", "multi-match-*");
     pathRouter.add("/multi/match/def", "multi-match-def");
 
@@ -83,6 +86,10 @@ public class PathRouterTest {
     Assert.assertEquals(1, routes.size());
     Assert.assertEquals("foobar", routes.get(0).getDestination());
     Assert.assertTrue(routes.get(0).getGroupNameValues().isEmpty());
+
+    routes = pathRouter.getDestinations("/abc/bar/id");
+    Assert.assertEquals(1, routes.size());
+    Assert.assertEquals("abc-type-id", routes.get(0).getDestination());
 
     routes = pathRouter.getDestinations("/multiple/slash/route");
     Assert.assertEquals(1, routes.size());

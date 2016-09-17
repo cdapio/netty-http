@@ -35,7 +35,7 @@ public final class PatternPathRouterWithGroups<T> {
 
   //GROUP_PATTERN is used for named wild card pattern in paths which is specified within braces.
   //Example: {id}
-  private static final Pattern GROUP_PATTERN = Pattern.compile("\\{(.*?)\\}");
+  public static final Pattern GROUP_PATTERN = Pattern.compile("\\{(.*?)\\}");
 
   // non-greedy wild card match.
   private static final Pattern WILD_CARD_PATTERN = Pattern.compile("\\*\\*");
