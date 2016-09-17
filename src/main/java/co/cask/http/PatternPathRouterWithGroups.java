@@ -40,16 +40,18 @@ public final class PatternPathRouterWithGroups<T> {
   // non-greedy wild card match.
   private static final Pattern WILD_CARD_PATTERN = Pattern.compile("\\*\\*");
 
+  private final int maxPathParts;
   private final List<ImmutablePair<Pattern, RouteDestinationWithGroups>> patternRouteList;
 
-  public static <T> PatternPathRouterWithGroups<T> create() {
-    return new PatternPathRouterWithGroups<>();
+  public static <T> PatternPathRouterWithGroups<T> create(int maxPathParts) {
+    return new PatternPathRouterWithGroups<>(maxPathParts);
   }
 
   /**
    * Initialize PatternPathRouterWithGroups.
    */
-  public PatternPathRouterWithGroups() {
+  public PatternPathRouterWithGroups(int maxPathParts) {
+    this.maxPathParts = maxPathParts;
     this.patternRouteList = Lists.newArrayList();
   }
 
@@ -69,6 +71,10 @@ public final class PatternPathRouterWithGroups<T> {
 
 
     String [] parts = path.split("/");
+    if (parts.length - 1 > maxPathParts) {
+      throw new IllegalArgumentException(String.format("Number of parts of path %s exceeds allowed limit %s",
+                                                       source, maxPathParts));
+    }
     StringBuilder sb =  new StringBuilder();
     List<String> groupNames = Lists.newArrayList();
 

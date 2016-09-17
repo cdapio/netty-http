@@ -47,8 +47,11 @@ import javax.ws.rs.Path;
 public final class HttpResourceHandler implements HttpHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpResourceHandler.class);
+  // Limit the number of parts of the path so that match score calculation during runtime does not overflow
+  private static final int MAX_PATH_PARTS = 25;
 
-  private final PatternPathRouterWithGroups<HttpResourceModel> patternRouter = PatternPathRouterWithGroups.create();
+  private final PatternPathRouterWithGroups<HttpResourceModel> patternRouter =
+    PatternPathRouterWithGroups.create(MAX_PATH_PARTS);
   private final Iterable<HttpHandler> handlers;
   private final Iterable<HandlerHook> handlerHooks;
   private final URLRewriter urlRewriter;
@@ -327,6 +330,11 @@ public final class HttpResourceHandler implements HttpHandler {
    * @return weighted score
    */
   private long getWeightedMatchScore(Iterable<String> requestUriParts, Iterable<String> destUriParts) {
+    // The score calculated below is a base 5 number
+    // The score will have one digit for one part of the URI
+    // This will allow for 27 parts in the path since log (Long.MAX_VALUE) to base 5 = 27.13
+    // We limit the number of parts in the path to 25 using MAX_PATH_PARTS constant above to avoid overflow during
+    // score calculation
     long score = 0;
     for (Iterator<String> rit = requestUriParts.iterator(), dit = destUriParts.iterator();
          rit.hasNext() && dit.hasNext(); ) {

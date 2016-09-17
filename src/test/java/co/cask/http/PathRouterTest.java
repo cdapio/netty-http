@@ -31,7 +31,7 @@ public class PathRouterTest {
   @Test
   public void testPathRoutings() {
 
-    PatternPathRouterWithGroups<String> pathRouter = PatternPathRouterWithGroups.create();
+    PatternPathRouterWithGroups<String> pathRouter = PatternPathRouterWithGroups.create(25);
     pathRouter.add("/foo/{baz}/b", "foobarb");
     pathRouter.add("/foo/bar/baz", "foobarbaz");
     pathRouter.add("/baz/bar", "bazbar");
@@ -166,5 +166,11 @@ public class PathRouterTest {
     Assert.assertEquals(1, routes.size());
     Assert.assertEquals("wildcard-foo-id-2", routes.get(0).getDestination());
     Assert.assertEquals(ImmutableMap.of("id", "id1"), routes.get(0).getGroupNameValues());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testMaxPathParts() throws Exception {
+    PatternPathRouterWithGroups<String> pathRouter = PatternPathRouterWithGroups.create(5);
+    pathRouter.add("/1/2/3/4/5/6", "max-path-parts");
   }
 }
