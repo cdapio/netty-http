@@ -47,8 +47,11 @@ import javax.ws.rs.Path;
 public final class HttpResourceHandler implements HttpHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpResourceHandler.class);
+  // Limit the number of parts of the path so that match score calculation during runtime does not overflow
+  private static final int MAX_PATH_PARTS = 25;
 
-  private final PatternPathRouterWithGroups<HttpResourceModel> patternRouter = PatternPathRouterWithGroups.create();
+  private final PatternPathRouterWithGroups<HttpResourceModel> patternRouter =
+    PatternPathRouterWithGroups.create(MAX_PATH_PARTS);
   private final Iterable<HttpHandler> handlers;
   private final Iterable<HandlerHook> handlerHooks;
   private final URLRewriter urlRewriter;
@@ -70,6 +73,7 @@ public final class HttpResourceHandler implements HttpHandler {
     this.urlRewriter = urlRewriter;
 
     for (HttpHandler handler : handlers) {
+      LOG.trace("Parsing handler {}", handler.getClass().getName());
       String basePath = "";
       if (handler.getClass().isAnnotationPresent(Path.class)) {
         basePath =  handler.getClass().getAnnotation(Path.class).value();
@@ -89,8 +93,10 @@ public final class HttpResourceHandler implements HttpHandler {
           Set<HttpMethod> httpMethods = getHttpMethods(method);
           Preconditions.checkArgument(httpMethods.size() >= 1,
                                       String.format("No HttpMethod found for method: %s", method.getName()));
-          patternRouter.add(absolutePath, new HttpResourceModel(httpMethods, absolutePath, method,
-                                                                handler, exceptionHandler));
+          HttpResourceModel resourceModel = new HttpResourceModel(httpMethods, absolutePath, method,
+                                                                  handler, exceptionHandler);
+          LOG.trace("Adding resource model {}", resourceModel);
+          patternRouter.add(absolutePath, resourceModel);
         } else {
           LOG.trace("Not adding method {}({}) to path routing like. HTTP calls will not be routed to this method",
                     method.getName(), method.getParameterTypes());
@@ -280,40 +286,25 @@ public final class HttpResourceHandler implements HttpHandler {
   getMatchedDestination(List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> routableDestinations,
                         HttpMethod targetHttpMethod, String requestUri) {
 
+    LOG.trace("Routable destinations for request {}: {}", requestUri, routableDestinations);
     Iterable<String> requestUriParts = Splitter.on('/').omitEmptyStrings().split(requestUri);
     List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> matchedDestinations =
       Lists.newArrayListWithExpectedSize(routableDestinations.size());
-    int maxExactMatch = 0;
-    int maxGroupMatch = 0;
-    int maxPatternLength = 0;
+    long maxScore = 0;
 
     for (PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel> destination : routableDestinations) {
       HttpResourceModel resourceModel = destination.getDestination();
-      int groupMatch = destination.getGroupNameValues().size();
 
       for (HttpMethod httpMethod : resourceModel.getHttpMethod()) {
         if (targetHttpMethod.equals(httpMethod)) {
-
-          int exactMatch = getExactPrefixMatchCount(
-            requestUriParts, Splitter.on('/').omitEmptyStrings().split(resourceModel.getPath()));
-
-          // When there are multiple matches present, the following precedence order is used -
-          // 1. template path that has highest exact prefix match with the url is chosen.
-          // 2. template path has the maximum groups is chosen.
-          // 3. finally, template path that has the longest length is chosen.
-          if (exactMatch > maxExactMatch) {
-            maxExactMatch = exactMatch;
-            maxGroupMatch = groupMatch;
-            maxPatternLength = resourceModel.getPath().length();
-
+          long score = getWeightedMatchScore(requestUriParts,
+                                             Splitter.on('/').omitEmptyStrings().split(resourceModel.getPath()));
+          LOG.trace("Max score = {}. Weighted score for {} is {}. ", maxScore, destination, score);
+          if (score > maxScore) {
+            maxScore = score;
             matchedDestinations.clear();
             matchedDestinations.add(destination);
-          } else if (exactMatch == maxExactMatch && groupMatch >= maxGroupMatch) {
-            if (groupMatch > maxGroupMatch || resourceModel.getPath().length() > maxPatternLength) {
-              maxGroupMatch = groupMatch;
-              maxPatternLength = resourceModel.getPath().length();
-              matchedDestinations.clear();
-            }
+          } else if (score == maxScore) {
             matchedDestinations.add(destination);
           }
         }
@@ -321,7 +312,8 @@ public final class HttpResourceHandler implements HttpHandler {
     }
 
     if (matchedDestinations.size() > 1) {
-      throw new IllegalStateException(String.format("Multiple matched handlers found for request uri %s", requestUri));
+      throw new IllegalStateException(String.format("Multiple matched handlers found for request uri %s: %s",
+                                                    requestUri, matchedDestinations));
     } else if (matchedDestinations.size() == 1) {
       return matchedDestinations.get(0);
     }
@@ -329,18 +321,34 @@ public final class HttpResourceHandler implements HttpHandler {
   }
 
   /**
-   * @return the number of path components that match from left to right.
+   * Generate a weighted score based on position for matches of URI parts.
+   * The matches are weighted in descending order from left to right.
+   * Exact match is weighted higher than group match, and group match is weighted higher than wildcard match.
+   *
+   * @param requestUriParts the parts of request URI
+   * @param destUriParts the parts of destination URI
+   * @return weighted score
    */
-  private int getExactPrefixMatchCount(Iterable<String> first, Iterable<String> second) {
-    int count = 0;
-    for (Iterator<String> fit = first.iterator(), sit = second.iterator(); fit.hasNext() && sit.hasNext(); ) {
-      if (fit.next().equals(sit.next())) {
-        ++count;
+  private long getWeightedMatchScore(Iterable<String> requestUriParts, Iterable<String> destUriParts) {
+    // The score calculated below is a base 5 number
+    // The score will have one digit for one part of the URI
+    // This will allow for 27 parts in the path since log (Long.MAX_VALUE) to base 5 = 27.13
+    // We limit the number of parts in the path to 25 using MAX_PATH_PARTS constant above to avoid overflow during
+    // score calculation
+    long score = 0;
+    for (Iterator<String> rit = requestUriParts.iterator(), dit = destUriParts.iterator();
+         rit.hasNext() && dit.hasNext(); ) {
+      String requestPart = rit.next();
+      String destPart = dit.next();
+      if (requestPart.equals(destPart)) {
+        score = (score * 5) + 4;
+      } else if (PatternPathRouterWithGroups.GROUP_PATTERN.matcher(destPart).matches()) {
+        score = (score * 5) + 3;
       } else {
-        break;
+        score = (score * 5) + 2;
       }
     }
-    return count;
+    return score;
   }
 
   @Override
