@@ -284,15 +284,15 @@ public final class HttpResourceHandler implements HttpHandler {
     Iterable<String> requestUriParts = Splitter.on('/').omitEmptyStrings().split(requestUri);
     List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> matchedDestinations =
       Lists.newArrayListWithExpectedSize(routableDestinations.size());
-    int maxScore = 0;
+    long maxScore = 0;
 
     for (PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel> destination : routableDestinations) {
       HttpResourceModel resourceModel = destination.getDestination();
 
       for (HttpMethod httpMethod : resourceModel.getHttpMethod()) {
         if (targetHttpMethod.equals(httpMethod)) {
-          int score = getWeightedMatchScore(requestUriParts,
-                                            Splitter.on('/').omitEmptyStrings().split(resourceModel.getPath()));
+          long score = getWeightedMatchScore(requestUriParts,
+                                             Splitter.on('/').omitEmptyStrings().split(resourceModel.getPath()));
           LOG.trace("Max score = {}. Weighted score for {} is {}. ", maxScore, destination, score);
           if (score > maxScore) {
             maxScore = score;
@@ -323,18 +323,18 @@ public final class HttpResourceHandler implements HttpHandler {
    * @param destUriParts the parts of destination URI
    * @return weighted score
    */
-  private int getWeightedMatchScore(Iterable<String> requestUriParts, Iterable<String> destUriParts) {
-    int score = 0;
+  private long getWeightedMatchScore(Iterable<String> requestUriParts, Iterable<String> destUriParts) {
+    long score = 0;
     for (Iterator<String> rit = requestUriParts.iterator(), dit = destUriParts.iterator();
          rit.hasNext() && dit.hasNext(); ) {
       String requestPart = rit.next();
       String destPart = dit.next();
       if (requestPart.equals(destPart)) {
-        score = (score * 10) + 5;
+        score = (score * 5) + 4;
       } else if (PatternPathRouterWithGroups.GROUP_PATTERN.matcher(destPart).matches()) {
-        score = (score * 10) + 3;
+        score = (score * 5) + 3;
       } else {
-        score = (score * 10) + 1;
+        score = (score * 5) + 2;
       }
     }
     return score;
