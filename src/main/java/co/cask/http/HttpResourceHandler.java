@@ -70,6 +70,7 @@ public final class HttpResourceHandler implements HttpHandler {
     this.urlRewriter = urlRewriter;
 
     for (HttpHandler handler : handlers) {
+      LOG.trace("Parsing handler {}", handler.getClass().getName());
       String basePath = "";
       if (handler.getClass().isAnnotationPresent(Path.class)) {
         basePath =  handler.getClass().getAnnotation(Path.class).value();
@@ -89,8 +90,10 @@ public final class HttpResourceHandler implements HttpHandler {
           Set<HttpMethod> httpMethods = getHttpMethods(method);
           Preconditions.checkArgument(httpMethods.size() >= 1,
                                       String.format("No HttpMethod found for method: %s", method.getName()));
-          patternRouter.add(absolutePath, new HttpResourceModel(httpMethods, absolutePath, method,
-                                                                handler, exceptionHandler));
+          HttpResourceModel resourceModel = new HttpResourceModel(httpMethods, absolutePath, method,
+                                                                  handler, exceptionHandler);
+          LOG.trace("Adding resource model {}", resourceModel);
+          patternRouter.add(absolutePath, resourceModel);
         } else {
           LOG.trace("Not adding method {}({}) to path routing like. HTTP calls will not be routed to this method",
                     method.getName(), method.getParameterTypes());
