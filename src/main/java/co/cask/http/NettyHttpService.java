@@ -254,12 +254,12 @@ public final class NettyHttpService extends AbstractIdleService {
 
   @Override
   protected void startUp() throws Exception {
-    LOG.info("Starting {} http service on address {}...", serviceName, bindAddress);
+    LOG.info("Starting HTTP Service {} at address {}", serviceName, bindAddress);
     bootStrap(execThreadPoolSize, execThreadKeepAliveSecs);
     Channel channel = bootstrap.bind(bindAddress);
     channelGroup.add(channel);
     bindAddress = ((InetSocketAddress) channel.getLocalAddress());
-    LOG.info("Started {} http service on address {}", serviceName, bindAddress);
+    LOG.debug("Started HTTP Service {} at address {}", serviceName, bindAddress);
   }
 
   /**
@@ -271,7 +271,7 @@ public final class NettyHttpService extends AbstractIdleService {
 
   @Override
   protected void shutDown() throws Exception {
-    LOG.info("Stopping {} http service on address {}...", serviceName, bindAddress);
+    LOG.info("Stopping HTTP Service {}", serviceName);
     try {
       bootstrap.shutdown();
       if (!channelGroup.close().await(CLOSE_CHANNEL_TIMEOUT, TimeUnit.SECONDS)) {
@@ -285,7 +285,7 @@ public final class NettyHttpService extends AbstractIdleService {
         ExecutorUtil.terminate(executionHandler.getExecutor());
       }
     }
-    LOG.info("Stopped {} http service on address {}", serviceName, bindAddress);
+    LOG.debug("Stopped HTTP Service {} on address {}", serviceName, bindAddress);
   }
 
   /**
