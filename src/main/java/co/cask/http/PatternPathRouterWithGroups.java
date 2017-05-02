@@ -91,8 +91,10 @@ public final class PatternPathRouterWithGroups<T> {
       sb.append("/");
     }
 
-    //Ignore the last "/"
-    sb.setLength(sb.length() - 1);
+    // Ignore the last "/"
+    if (sb.length() > 0) {
+      sb.setLength(sb.length() - 1);
+    }
 
     Pattern pattern = Pattern.compile(sb.toString());
     patternRouteList.add(ImmutablePair.of(pattern, new RouteDestinationWithGroups(destination, groupNames)));
@@ -107,7 +109,7 @@ public final class PatternPathRouterWithGroups<T> {
    */
   public List<RoutableDestination<T>> getDestinations(String path) {
 
-    String cleanPath = (path.endsWith("/") && path.length() > 1)
+    String cleanPath = (path.endsWith("/") && path.length() > 0)
       ? path.substring(0, path.length() - 1) : path;
 
     List<RoutableDestination<T>> result = Lists.newArrayList();
