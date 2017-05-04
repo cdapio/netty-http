@@ -70,7 +70,7 @@ public final class PatternPathRouterWithGroups<T> {
       ? path.substring(0, path.length() - 1) : path;
 
 
-    String [] parts = path.split("/");
+    String[] parts = path.split("/", maxPathParts + 2);
     if (parts.length - 1 > maxPathParts) {
       throw new IllegalArgumentException(String.format("Number of parts of path %s exceeds allowed limit %s",
                                                        source, maxPathParts));
