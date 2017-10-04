@@ -16,47 +16,50 @@
 
 package co.cask.http;
 
+import co.cask.http.internal.BasicHandlerContext;
+import co.cask.http.internal.HttpDispatcher;
+import co.cask.http.internal.HttpResourceHandler;
+import co.cask.http.internal.RequestRouter;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.AbstractIdleService;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.jboss.netty.bootstrap.ServerBootstrap;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelEvent;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.ChannelUpstreamHandler;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
-import org.jboss.netty.channel.group.ChannelGroup;
-import org.jboss.netty.channel.group.DefaultChannelGroup;
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
-import org.jboss.netty.handler.codec.http.HttpContentCompressor;
-import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
-import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
-import org.jboss.netty.handler.execution.ExecutionHandler;
-import org.jboss.netty.handler.execution.OrderedMemoryAwareThreadPoolExecutor;
-import org.jboss.netty.util.ThreadNameDeterminer;
-import org.jboss.netty.util.ThreadRenamingRunnable;
-import org.jboss.netty.util.internal.ExecutorUtil;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.HttpContentCompressor;
+import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
+import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.concurrent.DefaultEventExecutor;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.EventExecutorGroup;
+import io.netty.util.concurrent.MultithreadEventExecutorGroup;
+import io.netty.util.concurrent.RejectedExecutionHandler;
+import io.netty.util.concurrent.SingleThreadEventExecutor;
+import io.netty.util.internal.SystemPropertyUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 
 
 /**
@@ -67,24 +70,27 @@ public final class NettyHttpService extends AbstractIdleService {
 
   private static final Logger LOG = LoggerFactory.getLogger(NettyHttpService.class);
 
-  private static final int CLOSE_CHANNEL_TIMEOUT = 5;
+  // Copied from Netty SingleThreadEventExecutor class since it is not public.
+  private static final int DEFAULT_MAX_PENDING_EXECUTOR_TASKS =
+    Math.max(16, SystemPropertyUtil.getInt("io.netty.eventexecutor.maxPendingTasks", Integer.MAX_VALUE));
 
   private final String serviceName;
   private final int bossThreadPoolSize;
   private final int workerThreadPoolSize;
   private final int execThreadPoolSize;
   private final long execThreadKeepAliveSecs;
-  private final Map<String, Object> channelConfigs;
+  private final Map<ChannelOption, Object> channelConfigs;
+  private final Map<ChannelOption, Object> childChannelConfigs;
   private final RejectedExecutionHandler rejectedExecutionHandler;
   private final HandlerContext handlerContext;
-  private final ChannelGroup channelGroup;
   private final HttpResourceHandler resourceHandler;
   private final Function<ChannelPipeline, ChannelPipeline> pipelineModifier;
   private final int httpChunkLimit;
   private final SSLHandlerFactory sslHandlerFactory;
 
   private ServerBootstrap bootstrap;
-  private ExecutionHandler executionHandler;
+  private Channel serverChannel;
+  private EventExecutorGroup eventExecutorGroup;
   private InetSocketAddress bindAddress;
 
   /**
@@ -108,7 +114,8 @@ public final class NettyHttpService extends AbstractIdleService {
   private NettyHttpService(String serviceName,
                            InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
                            int execThreadPoolSize, long execThreadKeepAliveSecs,
-                           Map<String, Object> channelConfigs,
+                           Map<ChannelOption, Object> channelConfigs,
+                           Map<ChannelOption, Object> childChannelConfigs,
                            RejectedExecutionHandler rejectedExecutionHandler, URLRewriter urlRewriter,
                            Iterable<? extends HttpHandler> httpHandlers,
                            Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit,
@@ -120,127 +127,14 @@ public final class NettyHttpService extends AbstractIdleService {
     this.workerThreadPoolSize = workerThreadPoolSize;
     this.execThreadPoolSize = execThreadPoolSize;
     this.execThreadKeepAliveSecs = execThreadKeepAliveSecs;
-    this.channelConfigs = ImmutableMap.copyOf(channelConfigs);
+    this.channelConfigs = new HashMap<>(channelConfigs);
+    this.childChannelConfigs = new HashMap<>(childChannelConfigs);
     this.rejectedExecutionHandler = rejectedExecutionHandler;
-    this.channelGroup = new DefaultChannelGroup();
     this.resourceHandler = new HttpResourceHandler(httpHandlers, handlerHooks, urlRewriter, exceptionHandler);
     this.handlerContext = new BasicHandlerContext(this.resourceHandler);
     this.httpChunkLimit = httpChunkLimit;
     this.pipelineModifier = pipelineModifier;
     this.sslHandlerFactory = sslHandlerFactory;
-  }
-
-  private boolean isSSLEnabled() {
-    return this.sslHandlerFactory != null;
-  }
-
-  /**
-   * Create Execution handlers with threadPoolExecutor.
-   *
-   * @param threadPoolSize size of threadPool
-   * @param threadKeepAliveSecs  maximum time that excess idle threads will wait for new tasks before terminating.
-   * @return instance of {@code ExecutionHandler}.
-   */
-  private ExecutionHandler createExecutionHandler(int threadPoolSize, long threadKeepAliveSecs) {
-    ThreadFactory threadFactory = new ThreadFactory() {
-      private final ThreadGroup threadGroup = new ThreadGroup(serviceName + "-executor-thread");
-      private final AtomicLong count = new AtomicLong(0);
-
-      @Override
-      public Thread newThread(Runnable r) {
-        Thread t = new Thread(threadGroup, r, String.format("%s-executor-%d", serviceName, count.getAndIncrement()));
-        t.setDaemon(true);
-        return t;
-      }
-    };
-
-    //Create ExecutionHandler
-    ThreadPoolExecutor threadPoolExecutor =
-      new OrderedMemoryAwareThreadPoolExecutor(threadPoolSize, 0, 0,
-                                               threadKeepAliveSecs, TimeUnit.SECONDS, threadFactory);
-    threadPoolExecutor.setRejectedExecutionHandler(rejectedExecutionHandler);
-    return new ExecutionHandler(threadPoolExecutor);
-  }
-
-  /**
-   * Bootstrap the pipeline.
-   * <ul>
-   *   <li>Create Execution handler</li>
-   *   <li>Setup Http resource handler</li>
-   *   <li>Setup the netty pipeline</li>
-   * </ul>
-   *
-   * @param threadPoolSize Size of threadpool in threadpoolExecutor
-   * @param threadKeepAliveSecs  maximum time that excess idle threads will wait for new tasks before terminating.
-   */
-  private void bootStrap(int threadPoolSize, long threadKeepAliveSecs) throws Exception {
-    // Make Netty uses the current name (i.e. the thread name as created by the executor) to name the threads.
-    ThreadRenamingRunnable.setThreadNameDeterminer(ThreadNameDeterminer.CURRENT);
-
-    executionHandler = (threadPoolSize) > 0 ? createExecutionHandler(threadPoolSize, threadKeepAliveSecs) : null;
-
-    Executor bossExecutor = Executors.newFixedThreadPool(bossThreadPoolSize,
-                                                         new ThreadFactoryBuilder()
-                                                           .setDaemon(true)
-                                                           .setNameFormat(serviceName + "-boss-thread-%d")
-                                                           .build());
-
-    Executor workerExecutor = Executors.newFixedThreadPool(workerThreadPoolSize,
-                                                           new ThreadFactoryBuilder()
-                                                             .setDaemon(true)
-                                                             .setNameFormat(serviceName + "-worker-thread-%d")
-                                                             .build());
-
-    //Server bootstrap with default worker threads (2 * number of cores)
-    bootstrap = new ServerBootstrap(new NioServerSocketChannelFactory(bossExecutor, bossThreadPoolSize,
-                                                                      workerExecutor, workerThreadPoolSize));
-    bootstrap.setOptions(channelConfigs);
-
-    resourceHandler.init(handlerContext);
-
-    final ChannelUpstreamHandler connectionTracker = new SimpleChannelUpstreamHandler() {
-      @Override
-      public void handleUpstream(ChannelHandlerContext ctx, ChannelEvent e) throws Exception {
-        channelGroup.add(e.getChannel());
-        super.handleUpstream(ctx, e);
-      }
-    };
-
-    bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-      @Override
-      public ChannelPipeline getPipeline() throws Exception {
-        ChannelPipeline pipeline = Channels.pipeline();
-        if (isSSLEnabled()) {
-          // Add SSLHandler if SSL is enabled
-          pipeline.addLast("ssl", sslHandlerFactory.create());
-        }
-        pipeline.addLast("tracker", connectionTracker);
-        pipeline.addLast("compressor", new HttpContentCompressor());
-        pipeline.addLast("encoder", new HttpResponseEncoder());
-        pipeline.addLast("decoder", new HttpRequestDecoder());
-        pipeline.addLast("router", new RequestRouter(resourceHandler, httpChunkLimit, isSSLEnabled()));
-        if (executionHandler != null) {
-          pipeline.addLast("executor", executionHandler);
-        }
-        pipeline.addLast("dispatcher", new HttpDispatcher());
-
-        if (pipelineModifier != null) {
-          pipeline = pipelineModifier.apply(pipeline);
-        }
-
-        return pipeline;
-      }
-    });
-  }
-
-  /**
-   * Creates a {@link Builder} for creating new instance of {@link NettyHttpService}.
-   *
-   * @deprecated Use {@link #builder(String)} instead.
-   */
-  @Deprecated
-  public static Builder builder() {
-    return new Builder();
   }
 
   /**
@@ -255,10 +149,13 @@ public final class NettyHttpService extends AbstractIdleService {
   @Override
   protected void startUp() throws Exception {
     LOG.info("Starting HTTP Service {} at address {}", serviceName, bindAddress);
-    bootStrap(execThreadPoolSize, execThreadKeepAliveSecs);
-    Channel channel = bootstrap.bind(bindAddress);
-    channelGroup.add(channel);
-    bindAddress = ((InetSocketAddress) channel.getLocalAddress());
+    resourceHandler.init(handlerContext);
+
+    eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize, execThreadKeepAliveSecs);
+    bootstrap = createBootstrap();
+    serverChannel = bootstrap.bind(bindAddress).sync().channel();
+    bindAddress = (InetSocketAddress) serverChannel.localAddress();
+
     LOG.debug("Started HTTP Service {} at address {}", serviceName, bindAddress);
   }
 
@@ -272,20 +169,105 @@ public final class NettyHttpService extends AbstractIdleService {
   @Override
   protected void shutDown() throws Exception {
     LOG.info("Stopping HTTP Service {}", serviceName);
+
     try {
-      bootstrap.shutdown();
-      if (!channelGroup.close().await(CLOSE_CHANNEL_TIMEOUT, TimeUnit.SECONDS)) {
-        LOG.warn("Timeout when closing all channels.");
-      }
+      serverChannel.close().sync();
     } finally {
+      bootstrap.config().group().shutdownGracefully();
+      bootstrap.config().childGroup().shutdownGracefully();
+      eventExecutorGroup.shutdownGracefully();
       resourceHandler.destroy(handlerContext);
-      bootstrap.releaseExternalResources();
-      if (executionHandler != null) {
-        executionHandler.releaseExternalResources();
-        ExecutorUtil.terminate(executionHandler.getExecutor());
-      }
     }
     LOG.debug("Stopped HTTP Service {} on address {}", serviceName, bindAddress);
+  }
+
+  /**
+   * Create {@link EventExecutorGroup} for executing handle methods.
+   *
+   * @param size size of threadPool
+   * @param keepAliveSecs  maximum time that excess idle threads will wait for new tasks before terminating
+   * @return instance of {@link EventExecutorGroup} or {@code null} if {@code size} is {@code <= 0}.
+   */
+  @Nullable
+  private EventExecutorGroup createEventExecutorGroup(int size, long keepAliveSecs) {
+    if (size <= 0) {
+      return null;
+    }
+
+    ThreadFactory threadFactory = new ThreadFactory() {
+      private final ThreadGroup threadGroup = new ThreadGroup(serviceName + "-executor-thread");
+      private final AtomicLong count = new AtomicLong(0);
+
+      @Override
+      public Thread newThread(Runnable r) {
+        Thread t = new Thread(threadGroup, r, String.format("%s-executor-%d", serviceName, count.getAndIncrement()));
+        t.setDaemon(true);
+        return t;
+      }
+    };
+
+    Executor executor = new ThreadPoolExecutor(0, size, keepAliveSecs, TimeUnit.SECONDS,
+                                               new SynchronousQueue<Runnable>(), threadFactory);
+    return new MultithreadEventExecutorGroup(size, executor, DEFAULT_MAX_PENDING_EXECUTOR_TASKS,
+                                             rejectedExecutionHandler) {
+      @Override
+      protected EventExecutor newChild(Executor executor, Object... args) throws Exception {
+        return new DefaultEventExecutor(this, executor, (Integer) args[0],
+                                        (RejectedExecutionHandler) args[1]);
+      }
+    };
+  }
+
+  /**
+   * Creates the server bootstrap.
+   */
+  private ServerBootstrap createBootstrap() throws Exception {
+    EventLoopGroup bossGroup = new NioEventLoopGroup(bossThreadPoolSize,
+                                                     new ThreadFactoryBuilder().setDaemon(true)
+                                                       .setNameFormat(serviceName + "-boss-thread-%d")
+                                                       .build());
+    EventLoopGroup workerGroup = new NioEventLoopGroup(workerThreadPoolSize,
+                                                       new ThreadFactoryBuilder()
+                                                         .setDaemon(true)
+                                                         .setNameFormat(serviceName + "-worker-thread-%d")
+                                                         .build());
+    ServerBootstrap bootstrap = new ServerBootstrap();
+    bootstrap
+      .group(bossGroup, workerGroup)
+      .channel(NioServerSocketChannel.class)
+      .childHandler(new ChannelInitializer<SocketChannel>() {
+        @Override
+        protected void initChannel(SocketChannel ch) throws Exception {
+          ChannelPipeline pipeline = ch.pipeline();
+          if (sslHandlerFactory != null) {
+            // Add SSLHandler if SSL is enabled
+            pipeline.addLast("ssl", sslHandlerFactory.create(ch.alloc()));
+          }
+          pipeline.addLast("compressor", new HttpContentCompressor());
+          pipeline.addLast("codec", new HttpServerCodec());
+          pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
+          pipeline.addLast("keepAlive", new HttpServerKeepAliveHandler());
+          pipeline.addLast("router", new RequestRouter(resourceHandler, httpChunkLimit, sslHandlerFactory != null));
+          if (eventExecutorGroup == null) {
+            pipeline.addLast("dispatcher", new HttpDispatcher());
+          } else {
+            pipeline.addLast(eventExecutorGroup, "dispatcher", new HttpDispatcher());
+          }
+
+          if (pipelineModifier != null) {
+            pipelineModifier.apply(pipeline);
+          }
+        }
+      });
+
+    for (Map.Entry<ChannelOption, Object> entry : channelConfigs.entrySet()) {
+      bootstrap.option(entry.getKey(), entry.getValue());
+    }
+    for (Map.Entry<ChannelOption, Object> entry : childChannelConfigs.entrySet()) {
+      bootstrap.childOption(entry.getKey(), entry.getValue());
+    }
+
+    return bootstrap;
   }
 
   /**
@@ -298,12 +280,19 @@ public final class NettyHttpService extends AbstractIdleService {
     private static final int DEFAULT_CONNECTION_BACKLOG = 1000;
     private static final int DEFAULT_EXEC_HANDLER_THREAD_POOL_SIZE = 60;
     private static final long DEFAULT_EXEC_HANDLER_THREAD_KEEP_ALIVE_TIME_SECS = 60L;
+    // Caller runs by default
     private static final RejectedExecutionHandler DEFAULT_REJECTED_EXECUTION_HANDLER =
-      new ThreadPoolExecutor.CallerRunsPolicy();
+      new RejectedExecutionHandler() {
+        @Override
+        public void rejected(Runnable task, SingleThreadEventExecutor executor) {
+          task.run();
+        }
+      };
     private static final int DEFAULT_HTTP_CHUNK_LIMIT = 150 * 1024 * 1024;
 
     private final String serviceName;
-    private final Map<String, Object> channelConfigs;
+    private final Map<ChannelOption, Object> channelConfigs;
+    private final Map<ChannelOption, Object> childChannelConfigs;
 
     private Iterable<? extends HttpHandler> handlers;
     private Iterable<? extends HandlerHook> handlerHooks = ImmutableList.of();
@@ -336,8 +325,9 @@ public final class NettyHttpService extends AbstractIdleService {
       rejectedExecutionHandler = DEFAULT_REJECTED_EXECUTION_HANDLER;
       httpChunkLimit = DEFAULT_HTTP_CHUNK_LIMIT;
       port = 0;
-      channelConfigs = Maps.newHashMap();
-      channelConfigs.put("backlog", DEFAULT_CONNECTION_BACKLOG);
+      channelConfigs = new HashMap<>();
+      childChannelConfigs = new HashMap<>();
+      channelConfigs.put(ChannelOption.SO_BACKLOG, DEFAULT_CONNECTION_BACKLOG);
       sslHandlerFactory = null;
       exceptionHandler = new ExceptionHandler();
     }
@@ -433,21 +423,35 @@ public final class NettyHttpService extends AbstractIdleService {
      * @return an instance of {@code Builder}.
      */
     public Builder setConnectionBacklog(int connectionBacklog) {
-      channelConfigs.put("backlog", connectionBacklog);
+      channelConfigs.put(ChannelOption.SO_BACKLOG, connectionBacklog);
       return this;
     }
 
     /**
-     * Sets channel configuration for the the netty service.
+     * Sets channel configuration for the netty service.
      *
-     * @param key Name of the configuration.
+     * @param channelOption the {@link ChannelOption} to set
      * @param value Value of the configuration.
      * @return an instance of {@code Builder}.
-     * @see org.jboss.netty.channel.ChannelConfig
-     * @see org.jboss.netty.channel.socket.ServerSocketChannelConfig
+     * @see io.netty.channel.ChannelConfig
+     * @see io.netty.channel.socket.ServerSocketChannelConfig
      */
-    public Builder setChannelConfig(String key, Object value) {
-      channelConfigs.put(key, value);
+    public Builder setChannelConfig(ChannelOption<?> channelOption, Object value) {
+      channelConfigs.put(channelOption, value);
+      return this;
+    }
+
+    /**
+     * Sets channel configuration for the child socket channel for the netty service.
+     *
+     * @param channelOption the {@link ChannelOption} to set
+     * @param value Value of the configuration.
+     * @return an instance of {@code Builder}.
+     * @see io.netty.channel.ChannelConfig
+     * @see io.netty.channel.socket.ServerSocketChannelConfig
+     */
+    public Builder setChildChannelConfig(ChannelOption<?> channelOption, Object value) {
+      childChannelConfigs.put(channelOption, value);
       return this;
     }
 
@@ -541,9 +545,9 @@ public final class NettyHttpService extends AbstractIdleService {
       }
 
       return new NettyHttpService(serviceName, bindAddress, bossThreadPoolSize, workerThreadPoolSize,
-                                  execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, rejectedExecutionHandler,
-                                  urlRewriter, handlers, handlerHooks, httpChunkLimit, pipelineModifier,
-                                  sslHandlerFactory, exceptionHandler);
+                                  execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, childChannelConfigs,
+                                  rejectedExecutionHandler, urlRewriter, handlers, handlerHooks, httpChunkLimit,
+                                  pipelineModifier, sslHandlerFactory, exceptionHandler);
     }
   }
 }

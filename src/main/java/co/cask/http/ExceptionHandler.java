@@ -16,8 +16,8 @@
 
 package co.cask.http;
 
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
 /**
  * Handles exceptions and provides a response via the {@link HttpResponder}.

@@ -16,12 +16,14 @@
 
 package co.cask.http;
 
+import co.cask.http.internal.InternalHttpResponder;
+import co.cask.http.internal.InternalHttpResponse;
 import com.google.common.base.Charsets;
 import com.google.common.collect.HashMultimap;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -39,10 +41,10 @@ public class InternalHttpResponderTest {
     InternalHttpResponder responder = new InternalHttpResponder();
     JsonObject output = new JsonObject();
     output.addProperty("data", "this is some data");
-    responder.sendJson(HttpResponseStatus.OK, output);
+    responder.sendJson(HttpResponseStatus.OK, output.toString());
 
     InternalHttpResponse response = responder.getResponse();
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), response.getStatusCode());
+    Assert.assertEquals(HttpResponseStatus.OK.code(), response.getStatusCode());
     JsonObject responseData = new Gson().fromJson(
       new InputStreamReader(response.getInputSupplier().getInput()), JsonObject.class);
     Assert.assertEquals(output, responseData);
@@ -85,9 +87,9 @@ public class InternalHttpResponderTest {
   public void testChunks() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
     ChunkResponder chunkResponder = responder.sendChunkStart(HttpResponseStatus.OK, null);
-    chunkResponder.sendChunk(ChannelBuffers.wrappedBuffer("a".getBytes(Charsets.UTF_8)));
-    chunkResponder.sendChunk(ChannelBuffers.wrappedBuffer("b".getBytes(Charsets.UTF_8)));
-    chunkResponder.sendChunk(ChannelBuffers.wrappedBuffer("c".getBytes(Charsets.UTF_8)));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("a".getBytes(Charsets.UTF_8)));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("b".getBytes(Charsets.UTF_8)));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("c".getBytes(Charsets.UTF_8)));
     chunkResponder.close();
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
@@ -96,7 +98,7 @@ public class InternalHttpResponderTest {
   @Test
   public void testSendContent() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
-    responder.sendContent(HttpResponseStatus.OK, ChannelBuffers.wrappedBuffer("abc".getBytes(Charsets.UTF_8)),
+    responder.sendContent(HttpResponseStatus.OK, Unpooled.wrappedBuffer("abc".getBytes(Charsets.UTF_8)),
                           "contentType", HashMultimap.<String, String>create());
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
@@ -105,7 +107,7 @@ public class InternalHttpResponderTest {
   private void validateResponse(InternalHttpResponse response, HttpResponseStatus expectedStatus, String expectedData)
     throws IOException {
     int code = response.getStatusCode();
-    Assert.assertEquals(expectedStatus.getCode(), code);
+    Assert.assertEquals(expectedStatus.code(), code);
     if (expectedData != null) {
       // read it twice to make sure the input supplier gives the full stream more than once.
       for (int i = 0; i < 2; i++) {

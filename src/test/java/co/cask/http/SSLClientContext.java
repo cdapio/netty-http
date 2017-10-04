@@ -18,6 +18,7 @@ package co.cask.http;
 
 import com.google.common.base.Throwables;
 import com.google.common.io.Closeables;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -26,6 +27,7 @@ import java.io.InputStream;
 import java.security.KeyStore;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
 
 /**
  * Provides Client Context
@@ -50,7 +52,8 @@ public class SSLClientContext {
         kmf.init(ks, keyStorePassword.toCharArray());
       }
       clientContext = SSLContext.getInstance(protocol);
-      clientContext.init(kmf == null ? null : kmf.getKeyManagers(), TrustManagerFactory.getTrustManagers(), null);
+      clientContext.init(kmf == null ? null : kmf.getKeyManagers(),
+                         InsecureTrustManagerFactory.INSTANCE.getTrustManagers(), null);
     } catch (Exception e) {
       throw Throwables.propagate(new Exception("Failed to initialize the client-side SSLContext", e));
     }

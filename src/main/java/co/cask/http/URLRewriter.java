@@ -16,7 +16,7 @@
 
 package co.cask.http;
 
-import org.jboss.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpRequest;
 
 /**
  * Re-writes URL of an incoming request before any handlers or their hooks are called.

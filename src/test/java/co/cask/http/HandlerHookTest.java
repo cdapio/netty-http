@@ -16,12 +16,13 @@
 
 package co.cask.http;
 
+import co.cask.http.internal.HandlerInfo;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Service;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
@@ -52,7 +53,7 @@ public class HandlerHookTest {
   @BeforeClass
   public static void setup() throws Exception {
 
-    NettyHttpService.Builder builder = NettyHttpService.builder();
+    NettyHttpService.Builder builder = NettyHttpService.builder("test-hook");
     builder.addHttpHandlers(ImmutableList.of(new TestHandler()));
     builder.setHandlerHooks(ImmutableList.of(handlerHook1, handlerHook2));
     builder.setHost(hostname);
@@ -75,7 +76,7 @@ public class HandlerHookTest {
   @Test
   public void testHandlerHookCall() throws Exception {
     int status = doGet("/test/v1/resource");
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.OK.code(), status);
 
     awaitPostHook();
     Assert.assertEquals(1, handlerHook1.getNumPreCalls());
@@ -88,7 +89,7 @@ public class HandlerHookTest {
   @Test
   public void testPreHookReject() throws Exception {
     int status = doGet("/test/v1/resource", "X-Request-Type", "Reject");
-    Assert.assertEquals(HttpResponseStatus.NOT_ACCEPTABLE.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.NOT_ACCEPTABLE.code(), status);
 
     // Wait for any post handlers to be called
     TimeUnit.MILLISECONDS.sleep(100);
@@ -104,7 +105,7 @@ public class HandlerHookTest {
   @Test
   public void testHandlerException() throws Exception {
     int status = doGet("/test/v1/exception");
-    Assert.assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), status);
 
     awaitPostHook();
     Assert.assertEquals(1, handlerHook1.getNumPreCalls());
@@ -117,7 +118,7 @@ public class HandlerHookTest {
   @Test
   public void testPreException() throws Exception {
     int status = doGet("/test/v1/resource", "X-Request-Type", "PreException");
-    Assert.assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.INTERNAL_SERVER_ERROR.code(), status);
 
     // Wait for any post handlers to be called
     TimeUnit.MILLISECONDS.sleep(100);
@@ -133,7 +134,7 @@ public class HandlerHookTest {
   @Test
   public void testPostException() throws Exception {
     int status = doGet("/test/v1/resource", "X-Request-Type", "PostException");
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.OK.code(), status);
 
     awaitPostHook();
     Assert.assertEquals(1, handlerHook1.getNumPreCalls());
@@ -146,7 +147,7 @@ public class HandlerHookTest {
   @Test
   public void testUnknownPath() throws Exception {
     int status = doGet("/unknown/path/test/v1/resource");
-    Assert.assertEquals(HttpResponseStatus.NOT_FOUND.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.NOT_FOUND.code(), status);
 
     // Wait for any post handlers to be called
     TimeUnit.MILLISECONDS.sleep(100);
@@ -193,7 +194,7 @@ public class HandlerHookTest {
     public boolean preCall(HttpRequest request, HttpResponder responder, HandlerInfo handlerInfo) {
       ++numPreCalls;
 
-      String header = request.getHeader("X-Request-Type");
+      String header = request.headers().get("X-Request-Type");
       if (header != null && header.equals("Reject")) {
         responder.sendStatus(HttpResponseStatus.NOT_ACCEPTABLE);
         return false;
@@ -211,7 +212,7 @@ public class HandlerHookTest {
       try {
         ++numPostCalls;
 
-        String header = request.getHeader("X-Request-Type");
+        String header = request.headers().get("X-Request-Type");
         if (header != null && header.equals("PostException")) {
           throw new IllegalArgumentException("PostException");
         }

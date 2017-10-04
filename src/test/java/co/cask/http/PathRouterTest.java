@@ -16,6 +16,7 @@
 
 package co.cask.http;
 
+import co.cask.http.internal.PatternPathRouterWithGroups;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.junit.Assert;

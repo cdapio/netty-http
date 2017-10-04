@@ -135,7 +135,7 @@ Example: Sample HTTP service that manages an application lifecycle:
       // ..
       JsonObject status = new JsonObject();
       status.addProperty("status", "RUNNING");
-      responder.sendJson(HttpResponseStatus.OK, status);
+      responder.sendJson(HttpResponseStatus.OK, status.toString());
     }
   }
 

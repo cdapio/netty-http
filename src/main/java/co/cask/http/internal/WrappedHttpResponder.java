@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,19 +14,21 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
+import co.cask.http.BodyProducer;
+import co.cask.http.ChunkResponder;
+import co.cask.http.HandlerHook;
+import co.cask.http.HttpResponder;
 import com.google.common.collect.Multimap;
-import com.google.gson.Gson;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
@@ -41,8 +43,8 @@ final class WrappedHttpResponder implements HttpResponder {
   private final HttpRequest httpRequest;
   private final HandlerInfo handlerInfo;
 
-  public WrappedHttpResponder(HttpResponder delegate, Iterable<? extends HandlerHook> handlerHooks,
-                              HttpRequest httpRequest, HandlerInfo handlerInfo) {
+  WrappedHttpResponder(HttpResponder delegate, Iterable<? extends HandlerHook> handlerHooks,
+                       HttpRequest httpRequest, HandlerInfo handlerInfo) {
     this.delegate = delegate;
     this.handlerHooks = handlerHooks;
     this.httpRequest = httpRequest;
@@ -51,20 +53,8 @@ final class WrappedHttpResponder implements HttpResponder {
 
 
   @Override
-  public void sendJson(HttpResponseStatus status, Object object) {
-    delegate.sendJson(status, object);
-    runHook(status);
-  }
-
-  @Override
-  public void sendJson(HttpResponseStatus status, Object object, Type type) {
-    delegate.sendJson(status, object, type);
-    runHook(status);
-  }
-
-  @Override
-  public void sendJson(HttpResponseStatus status, Object object, Type type, Gson gson) {
-    delegate.sendJson(status, object, type, gson);
+  public void sendJson(HttpResponseStatus status, String jsonString) {
+    delegate.sendJson(status, jsonString);
     runHook(status);
   }
 
@@ -114,7 +104,7 @@ final class WrappedHttpResponder implements HttpResponder {
       }
 
       @Override
-      public void sendChunk(ChannelBuffer chunk) throws IOException {
+      public void sendChunk(ByteBuf chunk) throws IOException {
         chunkResponder.sendChunk(chunk);
       }
 
@@ -127,7 +117,7 @@ final class WrappedHttpResponder implements HttpResponder {
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, ChannelBuffer content, String contentType,
+  public void sendContent(HttpResponseStatus status, ByteBuf content, String contentType,
                           Multimap<String, String> headers) {
     delegate.sendContent(status, content, contentType, headers);
     runHook(status);

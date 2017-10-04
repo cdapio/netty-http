@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,25 +14,18 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
-import com.google.common.collect.ImmutableMap;
-
-import java.util.Map;
+import co.cask.http.HandlerContext;
 
 /**
  * BasicHandlerContext returns an empty runtime arguments.
  */
-public class BasicHandlerContext implements HandlerContext {
+public final class BasicHandlerContext implements HandlerContext {
   private final HttpResourceHandler httpResourceHandler;
 
   public BasicHandlerContext(HttpResourceHandler httpResourceHandler) {
     this.httpResourceHandler = httpResourceHandler;
-  }
-
-  @Override
-  public Map<String, String> getRuntimeArguments() {
-   return ImmutableMap.of();
   }
 
   @Override

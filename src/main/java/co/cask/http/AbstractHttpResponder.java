@@ -20,16 +20,11 @@ import com.google.common.base.Charsets;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
-import com.google.gson.Gson;
-import com.google.gson.stream.JsonWriter;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBufferOutputStream;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
@@ -38,33 +33,9 @@ import javax.annotation.Nullable;
  */
 public abstract class AbstractHttpResponder implements HttpResponder {
 
-  private static final Gson GSON = new Gson();
-
   @Override
-  public void sendJson(HttpResponseStatus status, Object object) {
-    sendJson(status, object, object.getClass());
-  }
-
-  @Override
-  public void sendJson(HttpResponseStatus status, Object object, Type type) {
-    sendJson(status, object, type, GSON);
-  }
-
-  @Override
-  public void sendJson(HttpResponseStatus status, Object object, Type type, Gson gson) {
-    try {
-      ChannelBuffer channelBuffer = ChannelBuffers.dynamicBuffer();
-      try (
-        JsonWriter jsonWriter = new JsonWriter(
-          new OutputStreamWriter(new ChannelBufferOutputStream(channelBuffer), Charsets.UTF_8))
-      ) {
-        gson.toJson(object, type, jsonWriter);
-      }
-
-      sendContent(status, channelBuffer, "application/json", ImmutableMultimap.<String, String>of());
-    } catch (IOException e) {
-      throw Throwables.propagate(e);
-    }
+  public void sendJson(HttpResponseStatus status, String jsonString) {
+    sendString(status, jsonString, ImmutableMultimap.of(HttpHeaderNames.CONTENT_TYPE.toString(), "application/json"));
   }
 
   @Override
@@ -79,8 +50,8 @@ public abstract class AbstractHttpResponder implements HttpResponder {
       return;
     }
     try {
-      ChannelBuffer channelBuffer = ChannelBuffers.wrappedBuffer(Charsets.UTF_8.encode(data));
-      sendContent(status, channelBuffer, "text/plain; charset=utf-8", headers);
+      ByteBuf buffer = Unpooled.wrappedBuffer(Charsets.UTF_8.encode(data));
+      sendContent(status, buffer, "text/plain; charset=utf-8", headers);
     } catch (Exception e) {
       throw Throwables.propagate(e);
     }
@@ -98,13 +69,13 @@ public abstract class AbstractHttpResponder implements HttpResponder {
 
   @Override
   public void sendByteArray(HttpResponseStatus status, byte[] bytes, @Nullable Multimap<String, String> headers) {
-    ChannelBuffer channelBuffer = ChannelBuffers.wrappedBuffer(bytes);
-    sendContent(status, channelBuffer, "application/octet-stream", headers);
+    ByteBuf buffer = Unpooled.wrappedBuffer(bytes);
+    sendContent(status, buffer, "application/octet-stream", headers);
   }
 
   @Override
   public void sendBytes(HttpResponseStatus status, ByteBuffer buffer, @Nullable Multimap<String, String> headers) {
-    sendContent(status, ChannelBuffers.wrappedBuffer(buffer), "application/octet-stream", headers);
+    sendContent(status, Unpooled.wrappedBuffer(buffer), "application/octet-stream", headers);
   }
 
 }

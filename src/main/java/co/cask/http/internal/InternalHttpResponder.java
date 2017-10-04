@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,15 +14,18 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
+import co.cask.http.AbstractHttpResponder;
+import co.cask.http.BodyProducer;
+import co.cask.http.ChunkResponder;
 import com.google.common.collect.Multimap;
 import com.google.common.io.Files;
 import com.google.common.io.InputSupplier;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBufferInputStream;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,23 +52,23 @@ public class InternalHttpResponder extends AbstractHttpResponder {
 
   @Override
   public ChunkResponder sendChunkStart(HttpResponseStatus status, @Nullable Multimap<String, String> headers) {
-    statusCode = status.getCode();
+    statusCode = status.code();
     return new ChunkResponder() {
 
-      private ChannelBuffer contentChunks = ChannelBuffers.EMPTY_BUFFER;
+      private ByteBuf contentChunks = Unpooled.EMPTY_BUFFER;
       private boolean closed;
 
       @Override
       public void sendChunk(ByteBuffer chunk) throws IOException {
-        sendChunk(ChannelBuffers.wrappedBuffer(chunk));
+        sendChunk(Unpooled.wrappedBuffer(chunk));
       }
 
       @Override
-      public synchronized void sendChunk(ChannelBuffer chunk) throws IOException {
+      public synchronized void sendChunk(ByteBuf chunk) throws IOException {
         if (closed) {
           throw new IOException("ChunkResponder already closed.");
         }
-        contentChunks = ChannelBuffers.wrappedBuffer(contentChunks, chunk);
+        contentChunks = Unpooled.wrappedBuffer(contentChunks, chunk);
       }
 
       @Override
@@ -80,28 +83,28 @@ public class InternalHttpResponder extends AbstractHttpResponder {
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, @Nullable ChannelBuffer content, String contentType,
+  public void sendContent(HttpResponseStatus status, @Nullable ByteBuf content, String contentType,
                           @Nullable Multimap<String, String> headers) {
-    statusCode = status.getCode();
-    inputSupplier = createContentSupplier(content == null ? ChannelBuffers.EMPTY_BUFFER : content);
+    statusCode = status.code();
+    inputSupplier = createContentSupplier(content == null ? Unpooled.EMPTY_BUFFER : content);
   }
 
   @Override
   public void sendFile(File file, @Nullable Multimap<String, String> headers) {
-    statusCode = HttpResponseStatus.OK.getCode();
+    statusCode = HttpResponseStatus.OK.code();
     inputSupplier = Files.newInputStreamSupplier(file);
   }
 
   @Override
   public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer,
                           @Nullable Multimap<String, String> headers) {
-    statusCode = status.getCode();
+    statusCode = status.code();
     // Buffer all contents produced by the body producer
-    ChannelBuffer contentChunks = ChannelBuffers.EMPTY_BUFFER;
+    ByteBuf contentChunks = Unpooled.EMPTY_BUFFER;
     try {
-      ChannelBuffer chunk = bodyProducer.nextChunk();
-      while (chunk.readable()) {
-        contentChunks = ChannelBuffers.wrappedBuffer(contentChunks, chunk);
+      ByteBuf chunk = bodyProducer.nextChunk();
+      while (chunk.isReadable()) {
+        contentChunks = Unpooled.wrappedBuffer(contentChunks, chunk);
         chunk = bodyProducer.nextChunk();
       }
 
@@ -120,14 +123,14 @@ public class InternalHttpResponder extends AbstractHttpResponder {
     return new BasicInternalHttpResponse(statusCode, inputSupplier);
   }
 
-  private InputSupplier<InputStream> createContentSupplier(ChannelBuffer content) {
-    final ChannelBuffer responseContent = content.duplicate();    // Have independent pointers.
+  private InputSupplier<InputStream> createContentSupplier(ByteBuf content) {
+    final ByteBuf responseContent = content.duplicate();    // Have independent pointers.
     responseContent.markReaderIndex();
     return new InputSupplier<InputStream>() {
       @Override
       public InputStream getInput() throws IOException {
         responseContent.resetReaderIndex();
-        return new ChannelBufferInputStream(responseContent);
+        return new ByteBufInputStream(responseContent);
       }
     };
   }

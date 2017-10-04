@@ -20,14 +20,13 @@ import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.Maps;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.Service;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import org.jboss.netty.handler.codec.http.HttpMethod;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -52,7 +51,7 @@ public class URLRewriterTest {
   @BeforeClass
   public static void setup() throws Exception {
 
-    NettyHttpService.Builder builder = NettyHttpService.builder();
+    NettyHttpService.Builder builder = NettyHttpService.builder("test-url-rewrite");
     builder.addHttpHandlers(ImmutableList.of(new TestHandler()));
     builder.setUrlRewriter(new TestURLRewriter());
     builder.setHost(hostname);
@@ -74,10 +73,10 @@ public class URLRewriterTest {
   @Test
   public void testUrlRewrite() throws Exception {
     int status = doGet("/rewrite/test/v1/resource");
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.OK.code(), status);
 
     HttpURLConnection urlConn = request("/rewrite/test/v1/tweets/7648", HttpMethod.PUT);
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), urlConn.getResponseCode());
+    Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
     Map<String, String> stringMap = GSON.fromJson(getContent(urlConn),
                                                   new TypeToken<Map<String, String>>() { }.getType());
     Assert.assertEquals(ImmutableMap.of("status", "Handled put in tweets end-point, id: 7648"), stringMap);
@@ -88,37 +87,37 @@ public class URLRewriterTest {
   @Test
   public void testUrlRewriteNormalize() throws Exception {
     int status = doGet("/rewrite//test/v1//resource");
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.OK.code(), status);
   }
 
   @Test
   public void testRegularCall() throws Exception {
     int status = doGet("/test/v1/resource");
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.OK.code(), status);
   }
 
   @Test
   public void testUrlRewriteUnknownPath() throws Exception {
     int status = doGet("/rewrite/unknown/test/v1/resource");
-    Assert.assertEquals(HttpResponseStatus.NOT_FOUND.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.NOT_FOUND.code(), status);
   }
 
   @Test
   public void testUrlRewriteRedirect() throws Exception {
     int status = doGet("/redirect/test/v1/resource");
-    Assert.assertEquals(HttpResponseStatus.OK.getCode(), status);
+    Assert.assertEquals(HttpResponseStatus.OK.code(), status);
   }
 
   private static class TestURLRewriter implements URLRewriter {
     @Override
     public boolean rewrite(HttpRequest request, HttpResponder responder) {
-      if (request.getUri().startsWith("/rewrite/")) {
-        request.setUri(request.getUri().replace("/rewrite/", "/"));
+      if (request.uri().startsWith("/rewrite/")) {
+        request.setUri(request.uri().replace("/rewrite/", "/"));
       }
 
-      if (request.getUri().startsWith("/redirect/")) {
+      if (request.uri().startsWith("/redirect/")) {
         responder.sendStatus(HttpResponseStatus.MOVED_PERMANENTLY,
-                             ImmutableMultimap.of("Location", request.getUri().replace("/redirect/", "/rewrite/")));
+                             ImmutableMultimap.of("Location", request.uri().replace("/redirect/", "/rewrite/")));
         return false;
       }
       return true;
@@ -127,16 +126,6 @@ public class URLRewriterTest {
 
   private static int doGet(String resource) throws Exception {
     return doGet(resource, ImmutableMap.<String, String>of());
-  }
-
-  private static int doGet(String resource, String key, String value, String...keyValues) throws Exception {
-    Map<String, String> headerMap = Maps.newHashMap();
-    headerMap.put(key, value);
-
-    for (int i = 0; i < keyValues.length; i += 2) {
-      headerMap.put(keyValues[i], keyValues[i + 1]);
-    }
-    return doGet(resource, headerMap);
   }
 
   private static int doGet(String resource, Map<String, String> headers) throws Exception {
@@ -161,7 +150,7 @@ public class URLRewriterTest {
     if (method == HttpMethod.POST || method == HttpMethod.PUT) {
       urlConn.setDoOutput(true);
     }
-    urlConn.setRequestMethod(method.getName());
+    urlConn.setRequestMethod(method.name());
 
     return urlConn;
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,8 +14,11 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
+import co.cask.http.ExceptionHandler;
+import co.cask.http.HttpHandler;
+import co.cask.http.HttpResponder;
 import com.google.common.base.Function;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -23,10 +26,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import org.jboss.netty.handler.codec.http.HttpMethod;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.jboss.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.QueryStringDecoder;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -111,12 +114,11 @@ public final class HttpResourceModel {
    * @param groupValues Values needed for the invocation.
    */
   @SuppressWarnings("unchecked")
-  public HttpMethodInfo handle(HttpRequest request, HttpResponder responder, Map<String, String> groupValues)
-    throws Exception {
-
+  public HttpMethodInfo handle(HttpRequest request,
+                               HttpResponder responder, Map<String, String> groupValues) throws Exception {
     //TODO: Refactor group values.
     try {
-      if (httpMethods.contains(request.getMethod())) {
+      if (httpMethods.contains(request.method())) {
         //Setup args for reflection call
         Object [] args = new Object[paramsInfo.size()];
 
@@ -126,7 +128,7 @@ public final class HttpResourceModel {
             args[idx] = getPathParamValue(info, groupValues);
           }
           if (info.containsKey(QueryParam.class)) {
-            args[idx] = getQueryParamValue(info, request.getUri());
+            args[idx] = getQueryParamValue(info, request.uri());
           }
           if (info.containsKey(HeaderParam.class)) {
             args[idx] = getHeaderParamValue(info, request);
@@ -134,16 +136,16 @@ public final class HttpResourceModel {
           idx++;
         }
 
-        return new HttpMethodInfo(method, handler, request, responder, args, exceptionHandler);
+        return new HttpMethodInfo(method, handler, responder, args, exceptionHandler);
       } else {
         //Found a matching resource but could not find the right HttpMethod so return 405
         throw new HandlerException(HttpResponseStatus.METHOD_NOT_ALLOWED, String.format
-          ("Problem accessing: %s. Reason: Method Not Allowed", request.getUri()));
+          ("Problem accessing: %s. Reason: Method Not Allowed", request.uri()));
       }
     } catch (Throwable e) {
       throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                                 String.format("Error in executing request: %s %s", request.getMethod(),
-                                               request.getUri()), e);
+                                 String.format("Error in executing request: %s %s", request.method(),
+                                               request.uri()), e);
     }
   }
 
@@ -171,7 +173,7 @@ public final class HttpResourceModel {
   private Object getQueryParamValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations, String uri) {
     ParameterInfo<List<String>> info = (ParameterInfo<List<String>>) annotations.get(QueryParam.class);
     QueryParam queryParam = info.getAnnotation();
-    List<String> values = new QueryStringDecoder(uri).getParameters().get(queryParam.value());
+    List<String> values = new QueryStringDecoder(uri).parameters().get(queryParam.value());
 
     return (values == null) ? info.convert(defaultValue(annotations)) : info.convert(values);
   }
@@ -182,9 +184,8 @@ public final class HttpResourceModel {
     ParameterInfo<List<String>> info = (ParameterInfo<List<String>>) annotations.get(HeaderParam.class);
     HeaderParam headerParam = info.getAnnotation();
     String headerName = headerParam.value();
-    List<String> headers = request.getHeaders(headerParam.value());
-
-    return (request.containsHeader(headerName)) ? info.convert(headers) : info.convert(defaultValue(annotations));
+    boolean hasHeader = request.headers().contains(headerName);
+    return hasHeader ? info.convert(request.headers().getAll(headerName)) : info.convert(defaultValue(annotations));
   }
 
   /**

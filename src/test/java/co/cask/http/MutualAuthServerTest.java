@@ -16,7 +16,6 @@
 
 package co.cask.http;
 
-import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.google.common.io.Resources;
@@ -26,7 +25,6 @@ import org.junit.BeforeClass;
 
 import java.io.File;
 import java.net.URI;
-import java.util.List;
 
 /**
  * Test the HttpsServer with mutual authentication.
@@ -35,9 +33,6 @@ public class MutualAuthServerTest extends HttpsServerTest {
 
   @BeforeClass
   public static void setup() throws Exception {
-    List<HttpHandler> handlers = Lists.newArrayList();
-    handlers.add(new TestHandler());
-
     NettyHttpService.Builder builder = createBaseNettyHttpServiceBuilder();
 
     File keyStore = tmpFolder.newFile();
