@@ -14,24 +14,20 @@
  * the License.
  */
 
-package co.cask.http.internal;
+package co.cask.http;
 
-import java.io.IOException;
-import java.io.InputStream;
+import io.netty.channel.ChannelPipeline;
 
 /**
- * Interface used to get the status code and content from calling another handler internally.
+ * This class allows user modify a {@link ChannelPipeline} when it gets initialized, which happens on every
+ * new channel
  */
-public interface InternalHttpResponse {
-
-  int getStatusCode();
+public abstract class ChannelPipelineModifier {
 
   /**
-   * Opens an {@link InputStream} that contains the response content. The caller is responsible of closing the
-   * returned stream.
+   * Modifies the given {@link ChannelPipeline}.
    *
-   * @return an {@link InputStream} for reading response content
-   * @throws IOException if failed to open the stream
+   * @param pipeline the pipeline to be modified
    */
-  InputStream openInputStream() throws IOException;
+  public abstract void modify(ChannelPipeline pipeline);
 }

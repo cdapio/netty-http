@@ -64,7 +64,6 @@
     <rs-api.version>2.0</rs-api.version>
     <netty.version>4.1.16.Final</netty.version>
     <slf4j.version>1.7.5</slf4j.version>
-    <guava.version>13.0.1</guava.version>
     <findbugs.version>2.0.1</findbugs.version>
     <beanutils.version>1.8.3</beanutils.version>
     <junit.version>4.11</junit.version>
@@ -99,14 +98,10 @@
       <version>${slf4j.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>13.0.1</version>
-    </dependency>
-    <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>
       <version>${findbugs.version}</version>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>commons-beanutils</groupId>

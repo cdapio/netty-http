@@ -16,7 +16,6 @@
 
 package co.cask.http;
 
-import co.cask.http.internal.BasicInternalHttpResponse;
 import co.cask.http.internal.HttpResourceHandler;
 import co.cask.http.internal.InternalHttpResponder;
 import co.cask.http.internal.InternalHttpResponse;
@@ -43,7 +42,7 @@ public abstract class AbstractHttpHandler implements HttpHandler {
    * Send a request to another handler internal to the server, getting back the response body and response code.
    *
    * @param request request to send to another handler.
-   * @return {@link BasicInternalHttpResponse} containing the response code and body.
+   * @return {@link InternalHttpResponse} containing the response code and body.
    */
   protected InternalHttpResponse sendInternalRequest(HttpRequest request) {
     InternalHttpResponder responder = new InternalHttpResponder();

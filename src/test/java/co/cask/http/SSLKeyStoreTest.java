@@ -16,15 +16,15 @@
 
 package co.cask.http;
 
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Files;
-import com.google.common.io.Resources;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Tests SSL KeyStore behaviour
@@ -38,8 +38,9 @@ public class SSLKeyStoreTest {
   @BeforeClass
   public static void setup() throws Exception {
     keyStore = tmpFolder.newFile();
-    ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("cert.jks")),
-                     Files.newOutputStreamSupplier(keyStore));
+    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks")) {
+      Files.copy(is, keyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
   }
 
   @Test (expected = IllegalArgumentException.class)

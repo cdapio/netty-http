@@ -16,24 +16,22 @@
 
 package co.cask.http;
 
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Files;
-import com.google.common.io.Resources;
-import com.google.common.util.concurrent.Service;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.ssl.SslHandler;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import javax.annotation.Nullable;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
@@ -50,8 +48,10 @@ public class HttpsServerTest extends HttpServerTest {
   @BeforeClass
   public static void setup() throws Exception {
     File keyStore = tmpFolder.newFile();
-    ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("cert.jks")),
-                     Files.newOutputStreamSupplier(keyStore));
+
+    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks")) {
+      Files.copy(is, keyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
 
     /* IMPORTANT
      * Provide Certificate Configuration Here * *
@@ -67,9 +67,7 @@ public class HttpsServerTest extends HttpServerTest {
 
     sslClientContext = new SSLClientContext();
     service = builder.build();
-    service.startAndWait();
-    Service.State state = service.state();
-    Assert.assertEquals(Service.State.RUNNING, state);
+    service.start();
 
     int port = service.getBindAddress().getPort();
     baseURI = URI.create(String.format("https://localhost:%d", port));
@@ -80,6 +78,7 @@ public class HttpsServerTest extends HttpServerTest {
     URL url = baseURI.resolve(path).toURL();
     HttpsURLConnection.setDefaultSSLSocketFactory(sslClientContext.getClientContext().getSocketFactory());
     HostnameVerifier allHostsValid = new HostnameVerifier() {
+      @Override
       public boolean verify(String hostname, SSLSession session) {
         return true;
       }

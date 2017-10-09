@@ -16,10 +16,8 @@
 
 package co.cask.http.internal;
 
-import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -52,7 +50,7 @@ public final class PatternPathRouterWithGroups<T> {
    */
   public PatternPathRouterWithGroups(int maxPathParts) {
     this.maxPathParts = maxPathParts;
-    this.patternRouteList = Lists.newArrayList();
+    this.patternRouteList = new ArrayList<>();
   }
 
   /**
@@ -76,7 +74,7 @@ public final class PatternPathRouterWithGroups<T> {
                                                        source, maxPathParts));
     }
     StringBuilder sb =  new StringBuilder();
-    List<String> groupNames = Lists.newArrayList();
+    List<String> groupNames = new ArrayList<>();
 
     for (String part : parts) {
       Matcher groupMatcher = GROUP_PATTERN.matcher(part);
@@ -110,10 +108,10 @@ public final class PatternPathRouterWithGroups<T> {
     String cleanPath = (path.endsWith("/") && path.length() > 1)
       ? path.substring(0, path.length() - 1) : path;
 
-    List<RoutableDestination<T>> result = Lists.newArrayList();
+    List<RoutableDestination<T>> result = new ArrayList<>();
 
     for (ImmutablePair<Pattern, RouteDestinationWithGroups> patternRoute : patternRouteList) {
-      ImmutableMap.Builder<String, String> groupNameValuesBuilder = ImmutableMap.builder();
+      Map<String, String> groupNameValuesBuilder = new HashMap<>();
       Matcher matcher =  patternRoute.getFirst().matcher(cleanPath);
       if (matcher.matches()) {
         int matchIndex = 1;
@@ -122,8 +120,7 @@ public final class PatternPathRouterWithGroups<T> {
           groupNameValuesBuilder.put(name, value);
           matchIndex++;
         }
-        result.add(new RoutableDestination<>(patternRoute.getSecond().getDestination(),
-                                             groupNameValuesBuilder.build()));
+        result.add(new RoutableDestination<>(patternRoute.getSecond().getDestination(), groupNameValuesBuilder));
       }
     }
     return result;
@@ -187,10 +184,10 @@ public final class PatternPathRouterWithGroups<T> {
 
     @Override
     public String toString() {
-      return Objects.toStringHelper(this)
-        .add("destination", destination)
-        .add("groupNameValues", groupNameValues)
-        .toString();
+      return "RoutableDestination{" +
+        "destination=" + destination +
+        ", groupNameValues=" + groupNameValues +
+        '}';
     }
   }
 }

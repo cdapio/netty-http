@@ -16,22 +16,21 @@
 
 package co.cask.http.internal;
 
-import java.io.IOException;
-import java.io.InputStream;
+import javax.annotation.Nullable;
 
 /**
- * Interface used to get the status code and content from calling another handler internally.
+ * Converts an object of one type to another.
+ *
+ * @param <F> the source object type
+ * @param <T> the target object type
  */
-public interface InternalHttpResponse {
-
-  int getStatusCode();
+public interface Converter<F, T> {
 
   /**
-   * Opens an {@link InputStream} that contains the response content. The caller is responsible of closing the
-   * returned stream.
+   * Converts an object.
    *
-   * @return an {@link InputStream} for reading response content
-   * @throws IOException if failed to open the stream
+   * @throws Exception if the conversion failed
    */
-  InputStream openInputStream() throws IOException;
+  @Nullable
+  T convert(F from) throws Exception;
 }

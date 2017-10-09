@@ -16,7 +16,7 @@
 
 package co.cask.http.internal;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
 
 /**
  * An {@link ImmutablePair} consists of two elements within. The elements once set
@@ -79,10 +79,10 @@ final class ImmutablePair<A, B> {
    */
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("first", first)
-      .add("second", second)
-      .toString();
+    return "ImmutablePair{" +
+      "first=" + first +
+      ", second=" + second +
+      '}';
   }
 
   /**
@@ -91,7 +91,7 @@ final class ImmutablePair<A, B> {
    */
   @Override
   public int hashCode() {
-    return Objects.hashCode(first, second);
+    return Objects.hash(first, second);
   }
 
   /**
@@ -108,6 +108,6 @@ final class ImmutablePair<A, B> {
       return false;
     }
     ImmutablePair<?, ?> other = (ImmutablePair<?, ?>) o;
-    return Objects.equal(first, other.first) && Objects.equal(second, other.second);
+    return Objects.equals(first, other.first) && Objects.equals(second, other.second);
   }
 }
