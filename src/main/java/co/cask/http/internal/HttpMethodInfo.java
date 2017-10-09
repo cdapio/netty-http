@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,16 +14,21 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
+import co.cask.http.BodyConsumer;
+import co.cask.http.ExceptionHandler;
+import co.cask.http.HttpHandler;
+import co.cask.http.HttpResponder;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMultimap;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.HttpChunk;
-import org.jboss.netty.handler.codec.http.HttpHeaders;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.LastHttpContent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,30 +47,27 @@ class HttpMethodInfo {
 
   private final Method method;
   private final HttpHandler handler;
-  private final boolean isChunkedRequest;
-  private final ChannelBuffer requestContent;
-  private final HttpRequest request;
   private final HttpResponder responder;
   private final Object[] args;
   private final boolean isStreaming;
   private final ExceptionHandler exceptionHandler;
 
+  private HttpRequest request;
   private BodyConsumer bodyConsumer;
 
-  HttpMethodInfo(Method method, HttpHandler handler, HttpRequest request, HttpResponder responder, Object[] args,
-                 ExceptionHandler exceptionHandler) {
+  HttpMethodInfo(Method method, HttpHandler handler,
+                 HttpResponder responder, Object[] args, ExceptionHandler exceptionHandler) {
     this.method = method;
     this.handler = handler;
-    this.isChunkedRequest = request.isChunked();
-    this.requestContent = request.getContent();
     this.isStreaming = BodyConsumer.class.isAssignableFrom(method.getReturnType());
-    this.request = rewriteRequest(request, isStreaming);
     this.responder = responder;
     this.exceptionHandler = exceptionHandler;
 
     // The actual arguments list to invoke handler method
     this.args = new Object[args.length + 2];
-    this.args[0] = request;
+    // The actual HttpRequest object will be provided to the invoke method, since
+    // the HttpObjectAggregator may create a different instance
+    this.args[0] = null;
     this.args[1] = responder;
     System.arraycopy(args, 0, this.args, 2, args.length);
   }
@@ -73,29 +75,27 @@ class HttpMethodInfo {
   /**
    * Calls the httpHandler method.
    */
-  void invoke() throws Exception {
+  void invoke(HttpRequest request) throws Exception {
     bodyConsumer = null;
     Object invokeResult;
     try {
+      args[0] = this.request = request;
       invokeResult = method.invoke(handler, args);
     } catch (InvocationTargetException e) {
       exceptionHandler.handle(e.getTargetException(), request, responder);
+      return;
+    } catch (Throwable t) {
+      exceptionHandler.handle(t, request, responder);
       return;
     }
 
     if (isStreaming) {
       // Casting guarantee to be succeeded.
       bodyConsumer = (BodyConsumer) invokeResult;
-      if (bodyConsumer != null && requestContent.readable()) {
-        bodyConsumerChunk(requestContent);
-      }
-      if (bodyConsumer != null && !isChunkedRequest) {
-        bodyConsumerFinish();
-      }
     }
   }
 
-  void chunk(HttpChunk chunk) throws Exception {
+  void chunk(HttpContent chunk) throws Exception {
     if (bodyConsumer == null) {
       // If the handler method doesn't want to handle chunk request, the bodyConsumer will be null.
       // It applies to case when the handler method inspects the request and decides to decline it.
@@ -104,10 +104,13 @@ class HttpMethodInfo {
       // there may be some chunk of data already sent by the client.
       return;
     }
-    if (chunk.isLast()) {
+
+    if (chunk.content().isReadable()) {
+      bodyConsumerChunk(chunk.content());
+    }
+
+    if (chunk instanceof LastHttpContent) {
       bodyConsumerFinish();
-    } else {
-      bodyConsumerChunk(chunk.getContent());
     }
   }
 
@@ -118,11 +121,11 @@ class HttpMethodInfo {
   }
 
   /**
-   * Calls the {@link BodyConsumer#chunk(ChannelBuffer, HttpResponder)} method. If the chunk method call
+   * Calls the {@link BodyConsumer#chunk(ByteBuf, HttpResponder)} method. If the chunk method call
    * throws exception, the {@link BodyConsumer#handleError(Throwable)} will be called and this method will
    * throw {@link HandlerException}.
    */
-  private void bodyConsumerChunk(ChannelBuffer buffer) throws HandlerException {
+  private void bodyConsumerChunk(ByteBuf buffer) throws HandlerException {
     try {
       bodyConsumer.chunk(buffer, responder);
     } catch (Throwable t) {
@@ -176,7 +179,8 @@ class HttpMethodInfo {
     }
 
     // Send the status and message, followed by closing of the connection.
-    responder.sendString(status, msg, ImmutableMultimap.of(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE));
+    responder.sendString(status, msg, ImmutableMultimap.of(HttpHeaderNames.CONNECTION.toString(),
+                                                           HttpHeaderValues.CLOSE.toString()));
     if (bodyConsumer != null) {
       bodyConsumerError(ex);
     }
@@ -187,17 +191,5 @@ class HttpMethodInfo {
    */
   boolean isStreaming() {
     return isStreaming;
-  }
-
-  private HttpRequest rewriteRequest(HttpRequest request, boolean isStreaming) {
-    if (!isStreaming) {
-      return request;
-    }
-
-    if (!request.isChunked() || request.getContent().readable()) {
-      request.setChunked(true);
-      request.setContent(ChannelBuffers.EMPTY_BUFFER);
-    }
-    return request;
   }
 }

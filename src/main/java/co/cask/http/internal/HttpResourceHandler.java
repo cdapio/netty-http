@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,17 +14,26 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
+import co.cask.http.BodyConsumer;
+import co.cask.http.ExceptionHandler;
+import co.cask.http.HandlerContext;
+import co.cask.http.HandlerHook;
+import co.cask.http.HttpHandler;
+import co.cask.http.HttpResponder;
+import co.cask.http.URLRewriter;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import org.jboss.netty.handler.codec.http.HttpMethod;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.FullHttpMessage;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +43,7 @@ import java.net.URI;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import javax.annotation.Nullable;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -79,11 +89,19 @@ public final class HttpResourceHandler implements HttpHandler {
         basePath =  handler.getClass().getAnnotation(Path.class).value();
       }
 
-      for (Method method:  handler.getClass().getDeclaredMethods()) {
-        if (method.getParameterTypes().length >= 2 &&
-          method.getParameterTypes()[0].isAssignableFrom(HttpRequest.class) &&
-          method.getParameterTypes()[1].isAssignableFrom(HttpResponder.class) &&
-          Modifier.isPublic(method.getModifiers())) {
+      for (Method method : handler.getClass().getDeclaredMethods()) {
+        Class<?>[] params = method.getParameterTypes();
+        if (params.length >= 2
+          && (params[0].isAssignableFrom(HttpRequest.class) || params[0].isAssignableFrom(FullHttpRequest.class))
+          && params[1].isAssignableFrom(HttpResponder.class)
+          && Modifier.isPublic(method.getModifiers())) {
+
+          // For streaming consumption, the first param cannot be FullHttpMessage
+          if (BodyConsumer.class.isAssignableFrom(method.getReturnType())
+            && params[0].isAssignableFrom(FullHttpMessage.class)) {
+            throw new IllegalArgumentException(
+              "Method with return type as BodyConsumer cannot have FullHttpMessage as the first argument: " + method);
+          }
 
           String relativePath = "";
           if (method.getAnnotation(Path.class) != null) {
@@ -99,7 +117,7 @@ public final class HttpResourceHandler implements HttpHandler {
           patternRouter.add(absolutePath, resourceModel);
         } else {
           LOG.trace("Not adding method {}({}) to path routing like. HTTP calls will not be routed to this method",
-                    method.getName(), method.getParameterTypes());
+                    method.getName(), params);
         }
       }
     }
@@ -139,10 +157,9 @@ public final class HttpResourceHandler implements HttpHandler {
    * @param responder instance of {@code HttpResponder} to handle the request.
    */
   public void handle(HttpRequest request, HttpResponder responder) {
-
     if (urlRewriter != null) {
       try {
-        request.setUri(URI.create(request.getUri()).normalize().toString());
+        request.setUri(URI.create(request.uri()).normalize().toString());
         if (!urlRewriter.rewrite(request, responder)) {
           return;
         }
@@ -150,19 +167,19 @@ public final class HttpResourceHandler implements HttpHandler {
         responder.sendString(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                              String.format("Caught exception processing request. Reason: %s",
                                           t.getMessage()));
-        LOG.error("Exception thrown during rewriting of uri {}", request.getUri(), t);
+        LOG.error("Exception thrown during rewriting of uri {}", request.uri(), t);
         return;
       }
     }
 
     try {
-      String path = URI.create(request.getUri()).normalize().getPath();
+      String path = URI.create(request.uri()).normalize().getPath();
 
       List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> routableDestinations
         = patternRouter.getDestinations(path);
 
       PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel> matchedDestination =
-        getMatchedDestination(routableDestinations, request.getMethod(), path);
+        getMatchedDestination(routableDestinations, request.method(), path);
 
       if (matchedDestination != null) {
         //Found a httpresource route to it.
@@ -187,21 +204,21 @@ public final class HttpResourceHandler implements HttpHandler {
           if (httpResourceModel.handle(request, responder, matchedDestination.getGroupNameValues()).isStreaming()) {
             responder.sendString(HttpResponseStatus.METHOD_NOT_ALLOWED,
                                  String.format("Body Consumer not supported for internalHttpResponder: %s",
-                                               request.getUri()));
+                                               request.uri()));
           }
         }
       } else if (routableDestinations.size() > 0)  {
         //Found a matching resource but could not find the right HttpMethod so return 405
         responder.sendString(HttpResponseStatus.METHOD_NOT_ALLOWED,
-                             String.format("Problem accessing: %s. Reason: Method Not Allowed", request.getUri()));
+                             String.format("Problem accessing: %s. Reason: Method Not Allowed", request.uri()));
       } else {
         responder.sendString(HttpResponseStatus.NOT_FOUND, String.format("Problem accessing: %s. Reason: Not Found",
-                                                                         request.getUri()));
+                                                                         request.uri()));
       }
     } catch (Throwable t) {
       responder.sendString(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                            String.format("Caught exception processing request. Reason: %s", t.getMessage()));
-      LOG.error("Exception thrown during request processing for uri {}", request.getUri(), t);
+      LOG.error("Exception thrown during request processing for uri {}", request.uri(), t);
     }
   }
 
@@ -213,28 +230,29 @@ public final class HttpResourceHandler implements HttpHandler {
    * @param responder instance of {@code HttpResponder} to handle the request.
    * @return HttpMethodInfo object, null if urlRewriter rewrite returns false, also when method cannot be invoked.
    */
+  @Nullable
   public HttpMethodInfo getDestinationMethod(HttpRequest request, HttpResponder responder) throws Exception {
     if (urlRewriter != null) {
       try {
-        request.setUri(URI.create(request.getUri()).normalize().toString());
+        request.setUri(URI.create(request.uri()).normalize().toString());
         if (!urlRewriter.rewrite(request, responder)) {
           return null;
         }
       } catch (Throwable t) {
-        LOG.error("Exception thrown during rewriting of uri {}", request.getUri(), t);
+        LOG.error("Exception thrown during rewriting of uri {}", request.uri(), t);
         throw new HandlerException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                                    String.format("Caught exception processing request. Reason: %s", t.getMessage()));
       }
     }
 
     try {
-      String path = URI.create(request.getUri()).normalize().getPath();
+      String path = URI.create(request.uri()).normalize().getPath();
 
       List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> routableDestinations =
         patternRouter.getDestinations(path);
 
       PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel> matchedDestination =
-        getMatchedDestination(routableDestinations, request.getMethod(), path);
+        getMatchedDestination(routableDestinations, request.method(), path);
 
       if (matchedDestination != null) {
         HttpResourceModel httpResourceModel = matchedDestination.getDestination();
@@ -259,10 +277,10 @@ public final class HttpResourceHandler implements HttpHandler {
         }
       } else if (routableDestinations.size() > 0)  {
         //Found a matching resource but could not find the right HttpMethod so return 405
-        throw new HandlerException(HttpResponseStatus.METHOD_NOT_ALLOWED, request.getUri());
+        throw new HandlerException(HttpResponseStatus.METHOD_NOT_ALLOWED, request.uri());
       } else {
         throw new HandlerException(HttpResponseStatus.NOT_FOUND,
-                                   String.format("Problem accessing: %s. Reason: Not Found", request.getUri()));
+                                   String.format("Problem accessing: %s. Reason: Not Found", request.uri()));
       }
     } catch (Throwable t) {
       if (t instanceof HandlerException) {

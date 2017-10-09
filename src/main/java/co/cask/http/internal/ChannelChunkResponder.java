@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,15 +14,15 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
-import org.jboss.netty.handler.codec.http.DefaultHttpChunk;
-import org.jboss.netty.handler.codec.http.DefaultHttpChunkTrailer;
+
+import co.cask.http.ChunkResponder;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.LastHttpContent;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -34,29 +34,27 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class ChannelChunkResponder implements ChunkResponder {
 
   private final Channel channel;
-  private final boolean keepAlive;
   private final AtomicBoolean closed;
 
-  ChannelChunkResponder(Channel channel, boolean keepAlive) {
+  ChannelChunkResponder(Channel channel) {
     this.channel = channel;
-    this.keepAlive = keepAlive;
     this.closed = new AtomicBoolean(false);
   }
 
   @Override
   public void sendChunk(ByteBuffer chunk) throws IOException {
-    sendChunk(ChannelBuffers.wrappedBuffer(chunk));
+    sendChunk(Unpooled.wrappedBuffer(chunk));
   }
 
   @Override
-  public void sendChunk(ChannelBuffer chunk) throws IOException {
+  public void sendChunk(ByteBuf chunk) throws IOException {
     if (closed.get()) {
       throw new IOException("ChunkResponder already closed.");
     }
-    if (!channel.isConnected()) {
+    if (!channel.isActive()) {
       throw new IOException("Connection already closed.");
     }
-    channel.write(new DefaultHttpChunk(chunk));
+    channel.write(new DefaultHttpContent(chunk));
   }
 
   @Override
@@ -64,9 +62,6 @@ final class ChannelChunkResponder implements ChunkResponder {
     if (!closed.compareAndSet(false, true)) {
       return;
     }
-    ChannelFuture future = channel.write(new DefaultHttpChunkTrailer());
-    if (!keepAlive) {
-      future.addListener(ChannelFutureListener.CLOSE);
-    }
+    channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
   }
 }

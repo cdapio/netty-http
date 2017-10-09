@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,19 +14,8 @@
  * the License.
  */
 
-package co.cask.http;
-
-import co.cask.http.internal.HttpResourceHandler;
-
 /**
- * Place holder for information about the environment. Will be passed in during lifecycle management calls of
- * HttpHandlers. Currently has methods to get RunTimeArguments.
+ * This is an internal package that contains the internal implementations of the netty-http library.
+ * User shouldn't use classes inside this package directly as the API can change at any time.
  */
-public interface HandlerContext {
-
-  /**
-   * @return the {@link HttpResourceHandler} associated with this context,
-   * used to let one handler call another internally.
-   */
-  HttpResourceHandler getHttpResourceHandler();
-}
+package co.cask.http.internal;

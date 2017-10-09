@@ -17,12 +17,10 @@
 package co.cask.http;
 
 import com.google.common.collect.Multimap;
-import com.google.gson.Gson;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.io.File;
-import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import javax.annotation.Nullable;
 
@@ -32,34 +30,16 @@ import javax.annotation.Nullable;
 public interface HttpResponder {
 
   /**
-   * Sends json response back to the client.
+   * Sends json response back to the client. This is a convenient method to send json encoded string with
+   * content type automatically set to {@code application/json}.
    *
    * @param status Status of the response.
-   * @param object Object that will be serialized into Json and sent back as content.
+   * @param jsonString The json string to send back.
    */
-  void sendJson(HttpResponseStatus status, Object object);
+  void sendJson(HttpResponseStatus status, String jsonString);
 
   /**
-   * Sends json response back to the client.
-   *
-   * @param status Status of the response.
-   * @param object Object that will be serialized into Json and sent back as content.
-   * @param type Type of object.
-   */
-  void sendJson(HttpResponseStatus status, Object object, Type type);
-
-  /**
-   * Sends json response back to the client using the given gson object.
-   *
-   * @param status Status of the response.
-   * @param object Object that will be serialized into Json and sent back as content.
-   * @param type Type of object.
-   * @param gson Gson object for serialization.
-   */
-  void sendJson(HttpResponseStatus status, Object object, Type type, Gson gson);
-
-  /**
-   * Send a string response back to the http client.
+   * Send a string response in UTF-8 encoding back to the http client.
    *
    * @param status status of the Http response.
    * @param data string data to be sent back.
@@ -67,7 +47,7 @@ public interface HttpResponder {
   void sendString(HttpResponseStatus status, String data);
 
   /**
-   * Send a string response back to the http client.
+   * Send a string response in UTF-8 encoding back to the http client.
    *
    * @param status status of the Http response.
    * @param data string data to be sent back.
@@ -126,7 +106,7 @@ public interface HttpResponder {
    * @param contentType Type of content.
    * @param headers Headers to be sent back.
    */
-  void sendContent(HttpResponseStatus status, ChannelBuffer content, String contentType,
+  void sendContent(HttpResponseStatus status, ByteBuf content, String contentType,
                    @Nullable Multimap<String, String> headers);
 
 

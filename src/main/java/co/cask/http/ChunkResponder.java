@@ -16,7 +16,7 @@
 
 package co.cask.http;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -41,7 +41,7 @@ public interface ChunkResponder extends Closeable {
    * @param chunk content to send
    * @throws IOException if this {@link ChunkResponder} already closed or the connection is closed
    */
-  void sendChunk(ChannelBuffer chunk) throws IOException;
+  void sendChunk(ByteBuf chunk) throws IOException;
 
   /**
    * Closes this responder which signals the end of the chunk response.

@@ -16,27 +16,28 @@
 
 package co.cask.http;
 
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelDownstreamHandler;
-import org.jboss.netty.handler.codec.http.HttpResponse;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http.HttpResponse;
 
 /**
  * Test ChannelHandler that adds a default header to every response.
  */
-public class TestChannelHandler extends SimpleChannelDownstreamHandler {
-  protected static final String HEADER_FIELD = "testHeaderField";
-  protected static final String HEADER_VALUE = "testHeaderValue";
+public class TestChannelHandler extends ChannelOutboundHandlerAdapter {
+
+  static final String HEADER_FIELD = "testHeaderField";
+  static final String HEADER_VALUE = "testHeaderValue";
 
   @Override
-  public void writeRequested(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
-    Object message = e.getMessage();
-    if (!(message instanceof HttpResponse)) {
-      super.writeRequested(ctx, e);
+  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+    if (!(msg instanceof HttpResponse)) {
+      super.write(ctx, msg, promise);
       return;
     }
-    HttpResponse response = (HttpResponse) message;
-    response.addHeader(HEADER_FIELD, HEADER_VALUE);
-    super.writeRequested(ctx, e);
+    HttpResponse response = (HttpResponse) msg;
+    response.headers().add(HEADER_FIELD, HEADER_VALUE);
+    super.write(ctx, response, promise);
+
   }
 }

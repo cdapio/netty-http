@@ -16,7 +16,7 @@
 
 package co.cask.http;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
 
 import javax.annotation.Nullable;
 
@@ -38,12 +38,12 @@ public abstract class BodyProducer {
   }
 
   /**
-   * Returns a {@link ChannelBuffer} representing the next chunk of bytes to send. If the returned
-   * {@link ChannelBuffer} is an empty buffer, it signals the end of the streaming.
+   * Returns a {@link ByteBuf} representing the next chunk of bytes to send. If the returned
+   * {@link ByteBuf} is an empty buffer, it signals the end of the streaming.
    *
    * @throws Exception if there is any error
    */
-  public abstract ChannelBuffer nextChunk() throws Exception;
+  public abstract ByteBuf nextChunk() throws Exception;
 
   /**
    * This method will get called after the last chunk of the body get sent successfully.

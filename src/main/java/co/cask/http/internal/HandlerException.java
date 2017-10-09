@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,14 +14,15 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
-import com.google.common.base.Charsets;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
-import org.jboss.netty.handler.codec.http.HttpResponse;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.jboss.netty.handler.codec.http.HttpVersion;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  *Creating Http Response for Exception messages.
@@ -44,8 +45,7 @@ final class HandlerException extends Exception {
   }
 
   HttpResponse createFailureResponse() {
-    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, failureStatus);
-    response.setContent(ChannelBuffers.copiedBuffer(message, Charsets.UTF_8));
-    return response;
+    return new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, failureStatus,
+                                       Unpooled.copiedBuffer(message, StandardCharsets.UTF_8));
   }
 }

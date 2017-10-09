@@ -25,10 +25,11 @@ import com.google.common.io.Closeables;
 import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Assert;
 
 import java.io.File;
@@ -57,7 +58,7 @@ import javax.ws.rs.QueryParam;
  */
 @SuppressWarnings("UnusedParameters")
 @Path("/test/v1")
-public class TestHandler implements HttpHandler {
+public class TestHandler extends AbstractHttpHandler {
 
   private static final Gson GSON = new Gson();
 
@@ -77,7 +78,7 @@ public class TestHandler implements HttpHandler {
   public void testGet(HttpRequest request, HttpResponder responder) {
     JsonObject object = new JsonObject();
     object.addProperty("status", "Handled get in resource end-point");
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("tweets/{id}")
@@ -85,7 +86,7 @@ public class TestHandler implements HttpHandler {
   public void testGetTweet(HttpRequest request, HttpResponder responder, @PathParam("id") String id) {
     JsonObject object = new JsonObject();
     object.addProperty("status", String.format("Handled get in tweets end-point, id: %s", id));
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("tweets/{id}")
@@ -93,7 +94,7 @@ public class TestHandler implements HttpHandler {
   public void testPutTweet(HttpRequest request, HttpResponder responder, @PathParam("id") String id) {
     JsonObject object = new JsonObject();
     object.addProperty("status", String.format("Handled put in tweets end-point, id: %s", id));
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("facebook/{id}/message")
@@ -104,7 +105,7 @@ public class TestHandler implements HttpHandler {
 
   @Path("facebook/{id}/message")
   @PUT
-  public void testPutMessage(HttpRequest request, HttpResponder responder, @PathParam("id") String id) {
+  public void testPutMessage(FullHttpRequest request, HttpResponder responder, @PathParam("id") String id) {
     String message = String.format("Handled put in tweets end-point, id: %s. ", id);
     try {
       String data = getStringContent(request);
@@ -115,12 +116,12 @@ public class TestHandler implements HttpHandler {
     }
     JsonObject object = new JsonObject();
     object.addProperty("result", message);
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("facebook/{id}/message")
   @POST
-  public void testPostMessage(HttpRequest request, HttpResponder responder, @PathParam("id") String id) {
+  public void testPostMessage(FullHttpRequest request, HttpResponder responder, @PathParam("id") String id) {
     String message = String.format("Handled post in tweets end-point, id: %s. ", id);
     try {
       String data = getStringContent(request);
@@ -131,7 +132,7 @@ public class TestHandler implements HttpHandler {
     }
     JsonObject object = new JsonObject();
     object.addProperty("result", message);
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("/user/{userId}/message/{messageId}")
@@ -141,7 +142,7 @@ public class TestHandler implements HttpHandler {
                                            @PathParam("messageId") int messageId) {
     JsonObject object = new JsonObject();
     object.addProperty("result", String.format("Handled multiple path parameters %s %d", userId, messageId));
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("/message/{messageId}/user/{userId}")
@@ -151,7 +152,7 @@ public class TestHandler implements HttpHandler {
                                                                          @PathParam("messageId") int messageId) {
     JsonObject object = new JsonObject();
     object.addProperty("result", String.format("Handled multiple path parameters %s %d", userId, messageId));
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("/NotRoutable/{id}")
@@ -160,7 +161,7 @@ public class TestHandler implements HttpHandler {
                                            HttpResponder responder, @PathParam("userid") String userId) {
     JsonObject object = new JsonObject();
     object.addProperty("result", String.format("Handled Not routable path %s ", userId));
-    responder.sendJson(HttpResponseStatus.OK, object);
+    responder.sendJson(HttpResponseStatus.OK, object.toString());
   }
 
   @Path("/exception")
@@ -169,8 +170,8 @@ public class TestHandler implements HttpHandler {
     throw new IllegalArgumentException("Illegal argument");
   }
 
-  private String getStringContent(HttpRequest request) throws IOException {
-    return request.getContent().toString(Charsets.UTF_8);
+  private String getStringContent(FullHttpRequest request) throws IOException {
+    return request.content().toString(Charsets.UTF_8);
   }
 
   @Path("/multi-match/**")
@@ -255,8 +256,8 @@ public class TestHandler implements HttpHandler {
       ByteBuffer offHeapBuffer = ByteBuffer.allocateDirect(fileSize);
 
       @Override
-      public void chunk(ChannelBuffer request, HttpResponder responder) {
-        offHeapBuffer.put(request.array());
+      public void chunk(ByteBuf request, HttpResponder responder) {
+        offHeapBuffer.put(request.nioBuffer());
       }
 
       @Override
@@ -283,9 +284,9 @@ public class TestHandler implements HttpHandler {
       ByteBuffer offHeapBuffer = ByteBuffer.allocateDirect(fileSize);
 
       @Override
-      public void chunk(ChannelBuffer request, HttpResponder responder) {
+      public void chunk(ByteBuf request, HttpResponder responder) {
         Preconditions.checkState(count == 1, "chunk error");
-        offHeapBuffer.put(request.array());
+        offHeapBuffer.put(request.nioBuffer());
       }
 
       @Override
@@ -304,14 +305,14 @@ public class TestHandler implements HttpHandler {
   @Path("/stream/upload/file")
   @PUT
   public BodyConsumer streamUploadFile(HttpRequest request, HttpResponder responder) throws FileNotFoundException {
-    final File file = new File(request.getHeader("File-Path"));
+    final File file = new File(request.headers().get("File-Path"));
     final FileChannel channel = new FileOutputStream(file).getChannel();
 
     return new BodyConsumer() {
       @Override
-      public void chunk(ChannelBuffer request, HttpResponder responder) {
+      public void chunk(ByteBuf request, HttpResponder responder) {
         try {
-          channel.write(request.toByteBuffer());
+          channel.write(request.nioBuffer());
         } catch (IOException e) {
           throw Throwables.propagate(e);
         }
@@ -335,22 +336,57 @@ public class TestHandler implements HttpHandler {
     };
   }
 
+  @Path("/stream/file")
+  @POST
+  public BodyConsumer uploadSendFile(HttpRequest request, HttpResponder responder) throws FileNotFoundException {
+    // This endpoint almost the same as the streamUploadFile, except it is a POST and it sends the file back
+    final File file = new File(request.headers().get("File-Path"));
+    final FileChannel channel = new FileOutputStream(file).getChannel();
+
+    return new BodyConsumer() {
+      @Override
+      public void chunk(ByteBuf request, HttpResponder responder) {
+        try {
+          channel.write(request.nioBuffer());
+        } catch (IOException e) {
+          throw Throwables.propagate(e);
+        }
+      }
+
+      @Override
+      public void finished(HttpResponder responder) {
+        try {
+          channel.close();
+          responder.sendFile(file, null);
+        } catch (IOException e) {
+          throw Throwables.propagate(e);
+        }
+      }
+
+      @Override
+      public void handleError(Throwable cause) {
+        Closeables.closeQuietly(channel);
+        file.delete();
+      }
+    };
+  }
+
   @Path("/aggregate/upload")
   @PUT
-  public void aggregatedUpload(HttpRequest request, HttpResponder response) {
-    ChannelBuffer content = request.getContent();
+  public void aggregatedUpload(FullHttpRequest request, HttpResponder response) {
+    ByteBuf content = request.content();
     int bytesUploaded = content.readableBytes();
     response.sendString(HttpResponseStatus.OK, "Uploaded:" + bytesUploaded);
   }
 
   @Path("/chunk")
   @POST
-  public void chunk(HttpRequest request, HttpResponder responder) throws IOException {
+  public void chunk(FullHttpRequest request, HttpResponder responder) throws IOException {
     // Echo the POST body of size 1 byte chunk
-    ChannelBuffer content = request.getContent();
+    ByteBuf content = request.content().copy();
     ChunkResponder chunker = responder.sendChunkStart(HttpResponseStatus.OK, null);
-    while (content.readable()) {
-      chunker.sendChunk(content.readSlice(1));
+    while (content.isReadable()) {
+      chunker.sendChunk(content.readBytes(1));
     }
     chunker.close();
   }
@@ -366,11 +402,11 @@ public class TestHandler implements HttpHandler {
       int times = 0;
 
       @Override
-      public ChannelBuffer nextChunk() {
+      public ByteBuf nextChunk() {
         if (times < repeat) {
-          return ChannelBuffers.wrappedBuffer(Charsets.UTF_8.encode(chunk + " " + times++));
+          return Unpooled.wrappedBuffer(Charsets.UTF_8.encode(chunk + " " + times++));
         }
-        return ChannelBuffers.EMPTY_BUFFER;
+        return Unpooled.EMPTY_BUFFER;
       }
 
       @Override
@@ -442,7 +478,7 @@ public class TestHandler implements HttpHandler {
     response.addProperty("name", name);
     response.add("hobby", GSON.toJsonTree(hobbies, new TypeToken<List<String>>() { }.getType()));
 
-    responder.sendJson(HttpResponseStatus.OK, response);
+    responder.sendJson(HttpResponseStatus.OK, response.toString());
   }
 
   @Path("/connectionClose")
@@ -475,7 +511,7 @@ public class TestHandler implements HttpHandler {
 
     return new BodyConsumer() {
       @Override
-      public void chunk(ChannelBuffer request, HttpResponder responder) {
+      public void chunk(ByteBuf request, HttpResponder responder) {
         if ("chunk".equals(failOn)) {
           throw new CustomException();
         } else if ("error".equals(failOn)) {

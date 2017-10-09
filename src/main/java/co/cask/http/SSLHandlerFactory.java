@@ -17,7 +17,10 @@
 package co.cask.http;
 
 import com.google.common.io.Closeables;
-import org.jboss.netty.handler.ssl.SslHandler;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslHandler;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -25,11 +28,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.Security;
-import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 
 /**
@@ -37,8 +37,7 @@ import javax.net.ssl.TrustManagerFactory;
  */
 public class SSLHandlerFactory {
 
-  private static final String protocol = "TLS";
-  private final SSLContext serverContext;
+  private final SslContext sslContext;
   private boolean needClientAuth;
 
   public SSLHandlerFactory(SSLConfig sslConfig) {
@@ -52,17 +51,17 @@ public class SSLHandlerFactory {
       KeyManagerFactory kmf = KeyManagerFactory.getInstance(algorithm);
       kmf.init(ks, sslConfig.getCertificatePassword() != null ? sslConfig.getCertificatePassword().toCharArray()
         : sslConfig.getKeyStorePassword().toCharArray());
-      KeyManager[] keyManagers = kmf.getKeyManagers();
-      TrustManager[] trustManagers = null;
+
+      SslContextBuilder builder = SslContextBuilder.forServer(kmf);
       if (sslConfig.getTrustKeyStore() != null) {
         this.needClientAuth = true;
         KeyStore tks = getKeyStore(sslConfig.getTrustKeyStore(), sslConfig.getTrustKeyStorePassword());
         TrustManagerFactory tmf = TrustManagerFactory.getInstance(algorithm);
         tmf.init(tks);
-        trustManagers = tmf.getTrustManagers();
+        builder.trustManager(tmf);
       }
-      serverContext = SSLContext.getInstance(protocol);
-      serverContext.init(keyManagers, trustManagers, null);
+
+      this.sslContext = builder.build();
     } catch (Exception e) {
       throw new IllegalArgumentException("Failed to initialize the server-side SSLContext", e);
     }
@@ -88,8 +87,8 @@ public class SSLHandlerFactory {
   /**
    * @return instance of {@code SslHandler}
    */
-  public SslHandler create() {
-    SSLEngine engine = serverContext.createSSLEngine();
+  public SslHandler create(ByteBufAllocator bufferAllocator) {
+    SSLEngine engine = sslContext.newEngine(bufferAllocator);
     engine.setNeedClientAuth(needClientAuth);
     engine.setUseClientMode(false);
     return new SslHandler(engine);
