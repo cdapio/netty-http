@@ -549,6 +549,40 @@ public class TestHandler extends AbstractHttpHandler {
     };
   }
 
+  // Endpoint to test compressed response
+  @Path("/compressResponse")
+  @GET
+  public void testCompressResponse(HttpRequest request, HttpResponder responder,
+                                   @QueryParam("message") String message,
+                                   @QueryParam("chunk") boolean chunk) {
+    if (message == null) {
+      responder.sendStatus(HttpResponseStatus.BAD_REQUEST);
+      return;
+    }
+
+    final ByteBuf content = Unpooled.copiedBuffer(message, StandardCharsets.UTF_8);
+    if (!chunk) {
+      responder.sendContent(HttpResponseStatus.OK, content, EmptyHttpHeaders.INSTANCE);
+    } else {
+      responder.sendContent(HttpResponseStatus.OK, new BodyProducer() {
+        @Override
+        public ByteBuf nextChunk() throws Exception {
+          return content.isReadable() ? content.readRetainedSlice(1) : Unpooled.EMPTY_BUFFER;
+        }
+
+        @Override
+        public void finished() throws Exception {
+          // no-op
+        }
+
+        @Override
+        public void handleError(@Nullable Throwable cause) {
+          // no-op
+        }
+      }, EmptyHttpHeaders.INSTANCE);
+    }
+  }
+
   @Override
   public void init(HandlerContext context) {}
 
