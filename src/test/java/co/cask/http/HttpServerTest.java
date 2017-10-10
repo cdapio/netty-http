@@ -74,6 +74,8 @@ import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.DeflaterInputStream;
+import java.util.zip.GZIPInputStream;
 import javax.annotation.Nullable;
 
 /**
@@ -717,6 +719,26 @@ public class HttpServerTest {
     Assert.assertFalse(failureFile.isFile());
   }
 
+  @Test
+  public void testCompressResponse() throws Exception {
+    HttpURLConnection urlConn = request("/test/v1/compressResponse?message=Testing+message", HttpMethod.GET);
+    urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
+
+    Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
+    Assert.assertTrue(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()) != null);
+
+    Assert.assertEquals("Testing message", getContent(urlConn));
+
+    // Test with chunk encoding
+    urlConn = request("/test/v1/compressResponse?chunk=true&message=Testing+message+chunk", HttpMethod.GET);
+    urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
+
+    Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
+    Assert.assertTrue(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()) != null);
+
+    Assert.assertEquals("Testing message chunk", getContent(urlConn));
+  }
+
   protected Socket createRawSocket(URL url) throws IOException {
     return new Socket(url.getHost(), url.getPort());
   }
@@ -756,7 +778,19 @@ public class HttpServerTest {
   }
 
   private String getContent(HttpURLConnection urlConn) throws IOException {
-    return getContent(urlConn.getInputStream());
+    InputStream is = urlConn.getInputStream();
+    String contentEncoding = urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString());
+    if (contentEncoding != null) {
+      if ("gzip".equalsIgnoreCase(contentEncoding)) {
+        is = new GZIPInputStream(is);
+      } else if ("deflate".equalsIgnoreCase(contentEncoding)) {
+        is = new DeflaterInputStream(is);
+      } else {
+        throw new IllegalArgumentException("Unsupported content encoding " + contentEncoding);
+      }
+    }
+
+    return getContent(is);
   }
 
   private String getContent(InputStream is) throws IOException {

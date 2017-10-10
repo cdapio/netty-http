@@ -316,8 +316,8 @@ public final class NettyHttpService {
             // Add SSLHandler if SSL is enabled
             pipeline.addLast("ssl", sslHandlerFactory.create(ch.alloc()));
           }
-          pipeline.addLast("compressor", new HttpContentCompressor());
           pipeline.addLast("codec", new HttpServerCodec());
+          pipeline.addLast("compressor", new HttpContentCompressor());
           pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
           pipeline.addLast("keepAlive", new HttpServerKeepAliveHandler());
           pipeline.addLast("router", new RequestRouter(resourceHandler, httpChunkLimit, sslHandlerFactory != null));
