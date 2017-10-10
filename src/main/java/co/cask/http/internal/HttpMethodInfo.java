@@ -20,9 +20,8 @@ import co.cask.http.BodyConsumer;
 import co.cask.http.ExceptionHandler;
 import co.cask.http.HttpHandler;
 import co.cask.http.HttpResponder;
-import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableMultimap;
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
@@ -172,15 +171,13 @@ class HttpMethodInfo {
     String msg;
 
     if (ex instanceof InvocationTargetException) {
-      msg = String.format("Exception Encountered while processing request : %s",
-                          Objects.firstNonNull(ex.getCause(), ex).getMessage());
+      msg = String.format("Exception Encountered while processing request : %s", ex.getCause().getMessage());
     } else {
       msg = String.format("Exception Encountered while processing request: %s", ex.getMessage());
     }
 
     // Send the status and message, followed by closing of the connection.
-    responder.sendString(status, msg, ImmutableMultimap.of(HttpHeaderNames.CONNECTION.toString(),
-                                                           HttpHeaderValues.CLOSE.toString()));
+    responder.sendString(status, msg, new DefaultHttpHeaders().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE));
     if (bodyConsumer != null) {
       bodyConsumerError(ex);
     }

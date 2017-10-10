@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,19 +16,11 @@
 
 package co.cask.http;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.io.ByteStreams;
-import com.google.common.io.CharStreams;
-import com.google.common.io.Files;
-import com.google.common.reflect.TypeToken;
-import com.google.common.util.concurrent.Service;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -63,7 +55,6 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Type;
@@ -73,8 +64,13 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -106,22 +102,16 @@ public class HttpServerTest {
   protected static URI baseURI;
 
   protected static NettyHttpService.Builder createBaseNettyHttpServiceBuilder() {
-    List<HttpHandler> handlers = Lists.newArrayList();
-    handlers.add(new TestHandler());
-
-    NettyHttpService.Builder builder = NettyHttpService.builder("test");
-    builder.addHttpHandlers(handlers);
-    builder.setHttpChunkLimit(75 * 1024);
-    builder.setExceptionHandler(EXCEPTION_HANDLER);
-
-    builder.modifyChannelPipeline(new Function<ChannelPipeline, ChannelPipeline>() {
+    return NettyHttpService.builder("test")
+      .setHttpHandlers(new TestHandler())
+      .setHttpChunkLimit(75 * 1024)
+      .setExceptionHandler(EXCEPTION_HANDLER)
+      .setChannelPipelineModifier(new ChannelPipelineModifier() {
       @Override
-      public ChannelPipeline apply(ChannelPipeline channelPipeline) {
-        channelPipeline.addAfter("codec", "testhandler", new TestChannelHandler());
-        return channelPipeline;
+      public void modify(ChannelPipeline pipeline) {
+        pipeline.addAfter("codec", "testhandler", new TestChannelHandler());
       }
     });
-    return builder;
   }
 
   @ClassRule
@@ -130,33 +120,31 @@ public class HttpServerTest {
   @BeforeClass
   public static void setup() throws Exception {
     service = createBaseNettyHttpServiceBuilder().build();
-    service.startAndWait();
-    Service.State state = service.state();
-    Assert.assertEquals(Service.State.RUNNING, state);
-
+    service.start();
     int port = service.getBindAddress().getPort();
     baseURI = URI.create(String.format("http://localhost:%d", port));
   }
 
   @AfterClass
   public static void teardown() throws Exception {
-    service.stopAndWait();
+    String serviceName = service.getServiceName();
+    service.stop();
 
     // After service shutdown, there shouldn't be any netty threads (NETTY-10)
-    boolean passed = false;
-    for (int i = 0; i < 20 && !passed; i++) {
-      for (Thread t : Thread.getAllStackTraces().keySet()) {
-        String name = t.getName();
-        passed = !(name.startsWith("netty-executor-")
-          || name.startsWith("New I/O worker")
-          || name.startsWith("New I/O server"));
-        if (!passed) {
-          LOG.info("Live thread: {}", t.getName());
-          break;
-        }
+    boolean passed = true;
+    for (Thread t : Thread.getAllStackTraces().keySet()) {
+      String name = t.getName();
+      boolean isNettyThread = name.startsWith(serviceName + "-executor-")
+        || name.startsWith(serviceName + "-worker-thread-")
+        || name.startsWith(serviceName + "-boss-thread-");
+      if (isNettyThread) {
+        passed = false;
+        LOG.warn("Netty thread still alive: {}", t.getName());
+        break;
       }
-      TimeUnit.MILLISECONDS.sleep(100);
     }
+
+    Assert.assertTrue("Some netty threads are still alive. Please see logs above", passed);
   }
 
   @Test
@@ -203,7 +191,7 @@ public class HttpServerTest {
     urlConn.setRequestProperty("File-Path", filePath.getAbsolutePath());
     urlConn.getOutputStream().write("content".getBytes(StandardCharsets.UTF_8));
     Assert.assertEquals(200, urlConn.getResponseCode());
-    String result = new String(ByteStreams.toByteArray(urlConn.getInputStream()), StandardCharsets.UTF_8);
+    String result = getContent(urlConn);
     Assert.assertEquals("content", result);
   }
 
@@ -248,7 +236,7 @@ public class HttpServerTest {
 
     //test stream upload
     HttpURLConnection urlConn = request("/test/v1/stream/upload", HttpMethod.PUT);
-    Files.copy(fname, urlConn.getOutputStream());
+    Files.copy(fname.toPath(), urlConn.getOutputStream());
     Assert.assertEquals(200, urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -263,7 +251,7 @@ public class HttpServerTest {
     randf.close();
 
     HttpURLConnection urlConn = request("/test/v1/stream/upload/fail", HttpMethod.PUT);
-    Files.copy(fname, urlConn.getOutputStream());
+    Files.copy(fname.toPath(), urlConn.getOutputStream());
     Assert.assertEquals(500, urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -280,7 +268,7 @@ public class HttpServerTest {
     //test chunked upload
     HttpURLConnection urlConn = request("/test/v1/aggregate/upload", HttpMethod.PUT);
     urlConn.setChunkedStreamingMode(1024);
-    Files.copy(fname, urlConn.getOutputStream());
+    Files.copy(fname.toPath(), urlConn.getOutputStream());
     Assert.assertEquals(200, urlConn.getResponseCode());
 
     Assert.assertEquals(size, Integer.parseInt(getContent(urlConn).split(":")[1].trim()));
@@ -299,7 +287,7 @@ public class HttpServerTest {
     //test chunked upload
     HttpURLConnection urlConn = request("/test/v1/aggregate/upload", HttpMethod.PUT);
     urlConn.setChunkedStreamingMode(1024);
-    Files.copy(fname, urlConn.getOutputStream());
+    Files.copy(fname.toPath(), urlConn.getOutputStream());
     Assert.assertEquals(413, urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -459,7 +447,7 @@ public class HttpServerTest {
     HttpURLConnection urlConn = request("/test/v1/uexception", HttpMethod.GET);
     Assert.assertEquals(500, urlConn.getResponseCode());
     Assert.assertEquals("Exception encountered while processing request : User Exception",
-                        new String(ByteStreams.toByteArray(urlConn.getErrorStream()), Charsets.UTF_8));
+                        getContent(urlConn.getErrorStream()));
     urlConn.disconnect();
   }
 
@@ -556,17 +544,23 @@ public class HttpServerTest {
   @Test
   public void testSortedSetQueryParam() throws IOException {
     // For collection, if missing parameter, should get defaulted to empty collection
-    testContent("/test/v1/sortedSetQueryParam", "", HttpMethod.GET);
+    SortedSet<Integer> expected = new TreeSet<>();
+    testContent("/test/v1/sortedSetQueryParam", GSON.toJson(expected), HttpMethod.GET);
+
+    expected.add(10);
+    expected.add(20);
+    expected.add(30);
+    String expectedContent = GSON.toJson(expected);
 
     // Try different way of passing the ids, they should end up de-dup and sorted.
-    testContent("/test/v1/sortedSetQueryParam?id=30&id=10&id=20&id=30", "10,20,30", HttpMethod.GET);
-    testContent("/test/v1/sortedSetQueryParam?id=10&id=30&id=20&id=20", "10,20,30", HttpMethod.GET);
-    testContent("/test/v1/sortedSetQueryParam?id=20&id=30&id=20&id=10", "10,20,30", HttpMethod.GET);
+    testContent("/test/v1/sortedSetQueryParam?id=30&id=10&id=20&id=30", expectedContent, HttpMethod.GET);
+    testContent("/test/v1/sortedSetQueryParam?id=10&id=30&id=20&id=20", expectedContent, HttpMethod.GET);
+    testContent("/test/v1/sortedSetQueryParam?id=20&id=30&id=20&id=10", expectedContent, HttpMethod.GET);
   }
 
   @Test
   public void testListHeaderParam() throws IOException {
-    List<String> names = ImmutableList.of("name1", "name3", "name2", "name1");
+    List<String> names = Arrays.asList("name1", "name3", "name2", "name1");
 
     HttpURLConnection urlConn = request("/test/v1/listHeaderParam", HttpMethod.GET);
     for (String name : names) {
@@ -574,7 +568,7 @@ public class HttpServerTest {
     }
 
     Assert.assertEquals(200, urlConn.getResponseCode());
-    Assert.assertEquals(Joiner.on(',').join(names), getContent(urlConn));
+    Assert.assertEquals(names, GSON.fromJson(getContent(urlConn), new TypeToken<List<String>>() { }.getType()));
     urlConn.disconnect();
   }
 
@@ -589,7 +583,7 @@ public class HttpServerTest {
 
     Assert.assertEquals(30, json.get("age").getAsLong());
     Assert.assertEquals("hello", json.get("name").getAsString());
-    Assert.assertEquals(ImmutableList.of("casking"),
+    Assert.assertEquals(Collections.singletonList("casking"),
                         GSON.<List<String>>fromJson(json.get("hobby").getAsJsonArray(), hobbyType));
 
     urlConn.disconnect();
@@ -610,7 +604,7 @@ public class HttpServerTest {
 
       // Just read everything from the response. Since the server will close the connection, the read loop should
       // end with an EOF. Otherwise there will be timeout of this test case
-      String response = CharStreams.toString(new InputStreamReader(socket.getInputStream(), Charsets.UTF_8));
+      String response = getContent(socket.getInputStream());
       Assert.assertTrue(response.startsWith("HTTP/1.1 200 OK"));
     }
   }
@@ -620,7 +614,7 @@ public class HttpServerTest {
     HttpURLConnection urlConn = request("/test/v1/uploadReject", HttpMethod.POST, true);
     try {
       urlConn.setChunkedStreamingMode(1024);
-      urlConn.getOutputStream().write("Rejected Content".getBytes(Charsets.UTF_8));
+      urlConn.getOutputStream().write("Rejected Content".getBytes(StandardCharsets.UTF_8));
       try {
         urlConn.getInputStream();
         Assert.fail();
@@ -628,7 +622,7 @@ public class HttpServerTest {
         // Expect to get exception since server response with 400. Just drain the error stream.
         InputStream errorStream = urlConn.getErrorStream();
         if (errorStream != null) {
-          ByteStreams.toByteArray(errorStream);
+          getContent(errorStream);
         }
         Assert.assertEquals(HttpResponseStatus.BAD_REQUEST.code(), urlConn.getResponseCode());
       }
@@ -674,21 +668,21 @@ public class HttpServerTest {
     // exception in body consumer's chunk
     urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
     urlConn.setRequestProperty("failOn", "chunk");
-    Files.copy(fname, urlConn.getOutputStream());
+    Files.copy(fname.toPath(), urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.code(), urlConn.getResponseCode());
     urlConn.disconnect();
 
     // exception in body consumer's onFinish
     urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
     urlConn.setRequestProperty("failOn", "finish");
-    Files.copy(fname, urlConn.getOutputStream());
+    Files.copy(fname.toPath(), urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.code(), urlConn.getResponseCode());
     urlConn.disconnect();
 
     // exception in body consumer's handleError
     urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
     urlConn.setRequestProperty("failOn", "error");
-    Files.copy(fname, urlConn.getOutputStream());
+    Files.copy(fname.toPath(), urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.code(), urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -708,7 +702,7 @@ public class HttpServerTest {
                                         HttpMethod.GET);
     Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
 
-    String body = CharStreams.toString(new InputStreamReader(urlConn.getInputStream(), "UTF-8"));
+    String body = getContent(urlConn);
     StringBuilder expected = new StringBuilder();
     for (int i = 0; i < repeat; i++) {
       expected.append(chunk).append(" ").append(i);
@@ -762,10 +756,18 @@ public class HttpServerTest {
   }
 
   private String getContent(HttpURLConnection urlConn) throws IOException {
-    return new String(ByteStreams.toByteArray(urlConn.getInputStream()), Charsets.UTF_8);
+    return getContent(urlConn.getInputStream());
+  }
+
+  private String getContent(InputStream is) throws IOException {
+    ByteBuf buffer = Unpooled.buffer();
+    while (buffer.writeBytes(is, 1024) > 0) {
+      // no-op
+    }
+    return buffer.toString(StandardCharsets.UTF_8);
   }
 
   private void writeContent(HttpURLConnection urlConn, String content) throws IOException {
-    urlConn.getOutputStream().write(content.getBytes(Charsets.UTF_8));
+    urlConn.getOutputStream().write(content.getBytes(StandardCharsets.UTF_8));
   }
 }

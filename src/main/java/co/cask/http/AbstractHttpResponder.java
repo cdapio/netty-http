@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,66 +16,84 @@
 
 package co.cask.http;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.Multimap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.EmptyHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
-import javax.annotation.Nullable;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Base implementation of {@link HttpResponder} to simplify child implementations.
  */
 public abstract class AbstractHttpResponder implements HttpResponder {
 
+  protected static final String OCTET_STREAM_TYPE = "application/octet-stream";
+
   @Override
   public void sendJson(HttpResponseStatus status, String jsonString) {
-    sendString(status, jsonString, ImmutableMultimap.of(HttpHeaderNames.CONTENT_TYPE.toString(), "application/json"));
+    sendString(status, jsonString, new DefaultHttpHeaders().add(HttpHeaderNames.CONTENT_TYPE.toString(),
+                                                                "application/json"));
   }
 
   @Override
   public void sendString(HttpResponseStatus status, String data) {
-    sendString(status, data, null);
+    sendString(status, data, EmptyHttpHeaders.INSTANCE);
   }
 
   @Override
-  public void sendString(HttpResponseStatus status, String data, @Nullable Multimap<String, String> headers) {
+  public void sendString(HttpResponseStatus status, String data, HttpHeaders headers) {
     if (data == null) {
       sendStatus(status, headers);
       return;
     }
-    try {
-      ByteBuf buffer = Unpooled.wrappedBuffer(Charsets.UTF_8.encode(data));
-      sendContent(status, buffer, "text/plain; charset=utf-8", headers);
-    } catch (Exception e) {
-      throw Throwables.propagate(e);
-    }
+    ByteBuf buffer = Unpooled.wrappedBuffer(StandardCharsets.UTF_8.encode(data));
+    sendContent(status, buffer, addContentTypeIfMissing(new DefaultHttpHeaders().setAll(headers),
+                                                        "text/plain; charset=utf-8"));
   }
 
   @Override
   public void sendStatus(HttpResponseStatus status) {
-    sendContent(status, null, null, ImmutableMultimap.<String, String>of());
+    sendContent(status, Unpooled.EMPTY_BUFFER, EmptyHttpHeaders.INSTANCE);
   }
 
   @Override
-  public void sendStatus(HttpResponseStatus status, @Nullable Multimap<String, String> headers) {
-    sendContent(status, null, null, headers);
+  public void sendStatus(HttpResponseStatus status, HttpHeaders headers) {
+    sendContent(status, Unpooled.EMPTY_BUFFER, headers);
   }
 
   @Override
-  public void sendByteArray(HttpResponseStatus status, byte[] bytes, @Nullable Multimap<String, String> headers) {
+  public void sendByteArray(HttpResponseStatus status, byte[] bytes, HttpHeaders headers) {
     ByteBuf buffer = Unpooled.wrappedBuffer(bytes);
-    sendContent(status, buffer, "application/octet-stream", headers);
+    sendContent(status, buffer, headers);
   }
 
   @Override
-  public void sendBytes(HttpResponseStatus status, ByteBuffer buffer, @Nullable Multimap<String, String> headers) {
-    sendContent(status, Unpooled.wrappedBuffer(buffer), "application/octet-stream", headers);
+  public void sendBytes(HttpResponseStatus status, ByteBuffer buffer, HttpHeaders headers) {
+    sendContent(status, Unpooled.wrappedBuffer(buffer), headers);
   }
 
+  @Override
+  public void sendFile(File file) throws IOException {
+    sendFile(file, EmptyHttpHeaders.INSTANCE);
+  }
+
+  @Override
+  public ChunkResponder sendChunkStart(HttpResponseStatus status) {
+    return sendChunkStart(status, EmptyHttpHeaders.INSTANCE);
+  }
+
+  protected final HttpHeaders addContentTypeIfMissing(HttpHeaders headers, String contentType) {
+    if (!headers.contains(HttpHeaderNames.CONTENT_TYPE)) {
+      headers.set(HttpHeaderNames.CONTENT_TYPE, contentType);
+    }
+
+    return headers;
+  }
 }

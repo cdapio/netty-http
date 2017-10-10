@@ -16,8 +16,6 @@
 
 package co.cask.http.internal;
 
-import com.google.common.io.InputSupplier;
-
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -28,5 +26,12 @@ public interface InternalHttpResponse {
 
   int getStatusCode();
 
-  InputSupplier<? extends InputStream> getInputSupplier() throws IOException;
+  /**
+   * Opens an {@link InputStream} that contains the response content. The caller is responsible of closing the
+   * returned stream.
+   *
+   * @return an {@link InputStream} for reading response content
+   * @throws IOException if failed to open the stream
+   */
+  InputStream openInputStream() throws IOException;
 }

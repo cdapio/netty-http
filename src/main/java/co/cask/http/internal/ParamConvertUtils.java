@@ -16,26 +16,27 @@
 
 package co.cask.http.internal;
 
-import com.google.common.base.Defaults;
-import com.google.common.base.Function;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableCollection;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedSet;
-import com.google.common.collect.Maps;
-import com.google.common.primitives.Primitives;
-import com.google.common.reflect.TypeToken;
 import org.apache.commons.beanutils.ConvertUtils;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
+import java.util.TreeSet;
+import javax.annotation.Nullable;
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.QueryParam;
@@ -46,33 +47,32 @@ import javax.ws.rs.ext.ParamConverterProvider;
  */
 public final class ParamConvertUtils {
 
-  private static final Map<Class<?>, Method> PRIMITIVES_PARSE_METHODS;
+  private static final Map<Class<?>, Object> PRIMITIVE_DEFAULTS;
 
-  // Setup methods for converting string into primitive/boxed types
   static {
-    Map<Class<?>, Method> methods = Maps.newIdentityHashMap();
-    for (Class<?> wrappedType : Primitives.allWrapperTypes()) {
-      try {
-        methods.put(wrappedType, wrappedType.getMethod("valueOf", String.class));
-      } catch (NoSuchMethodException e) {
-        // Void and Character has no valueOf. It's ok to ignore them
-      }
-    }
-
-    PRIMITIVES_PARSE_METHODS = methods;
+    Map<Class<?>, Object> defaults = new IdentityHashMap<>();
+    defaults.put(Boolean.TYPE, false);
+    defaults.put(Character.TYPE, '\0');
+    defaults.put(Byte.TYPE, (byte) 0);
+    defaults.put(Short.TYPE, (short) 0);
+    defaults.put(Integer.TYPE, 0);
+    defaults.put(Long.TYPE, 0L);
+    defaults.put(Float.TYPE, 0f);
+    defaults.put(Double.TYPE, 0d);
+    PRIMITIVE_DEFAULTS = Collections.unmodifiableMap(defaults);
   }
 
   /**
    * Creates a converter function that converts a path segment into the given result type.
    * Current implementation doesn't follow the {@link PathParam} specification to maintain backward compatibility.
    */
-  public static Function<String, Object> createPathParamConverter(final Type resultType) {
+  public static Converter<String, Object> createPathParamConverter(final Type resultType) {
     if (!(resultType instanceof Class)) {
       throw new IllegalArgumentException("Unsupported @PathParam type " + resultType);
     }
-    return new Function<String, Object>() {
+    return new Converter<String, Object>() {
       @Override
-      public Object apply(String value) {
+      public Object convert(String value) {
         return ConvertUtils.convert(value, (Class<?>) resultType);
       }
     };
@@ -85,7 +85,7 @@ public final class ParamConvertUtils {
    *   <li>Does not support types registered with {@link ParamConverterProvider}</li>
    * </ol>
    */
-  public static Function<List<String>, Object> createHeaderParamConverter(Type resultType) {
+  public static Converter<List<String>, Object> createHeaderParamConverter(Type resultType) {
     return createListConverter(resultType);
   }
 
@@ -96,7 +96,7 @@ public final class ParamConvertUtils {
    *   <li>Does not support types registered with {@link ParamConverterProvider}</li>
    * </ol>
    */
-  public static Function<List<String>, Object> createQueryParamConverter(Type resultType) {
+  public static Converter<List<String>, Object> createQueryParamConverter(Type resultType) {
     return createListConverter(resultType);
   }
 
@@ -106,15 +106,13 @@ public final class ParamConvertUtils {
    * @see #createHeaderParamConverter(Type)
    * @see #createQueryParamConverter(Type)
    */
-  private static Function<List<String>, Object> createListConverter(Type resultType) {
-    TypeToken<?> typeToken = TypeToken.of(resultType);
-
+  private static Converter<List<String>, Object> createListConverter(Type resultType) {
     // Use boxed type if raw type is primitive type. Otherwise the type won't change.
-    Class<?> resultClass = typeToken.getRawType();
+    Class<?> resultClass = getRawClass(resultType);
 
     // For string, just return the first value
     if (resultClass == String.class) {
-      return new BasicConverter(Defaults.defaultValue(resultClass)) {
+      return new BasicConverter(defaultValue(resultClass)) {
         @Override
         protected Object convert(String value) throws Exception {
           return value;
@@ -125,7 +123,7 @@ public final class ParamConvertUtils {
     // Creates converter based on the type
 
     // Primitive
-    Function<List<String>, Object> converter = createPrimitiveTypeConverter(resultClass);
+    Converter<List<String>, Object> converter = createPrimitiveTypeConverter(resultClass);
     if (converter != null) {
       return converter;
     }
@@ -143,43 +141,33 @@ public final class ParamConvertUtils {
     }
 
     // Collection
-    converter = createCollectionConverter(typeToken);
+    converter = createCollectionConverter(resultType);
     if (converter != null) {
       return converter;
     }
 
-    throw new IllegalArgumentException("Unsupported type " + typeToken);
+    throw new IllegalArgumentException("Unsupported type " + resultType + " of type class " + resultType.getClass());
   }
 
 
   /**
    * Creates a converter function that converts value into primitive type.
    *
-   * @return A converter function or {@code null} if the given type is not primitive type
+   * @return A converter function or {@code null} if the given type is not primitive type or boxed type
    */
-  private static Function<List<String>, Object> createPrimitiveTypeConverter(Class<?> resultClass) {
-    Object defaultValue = Defaults.defaultValue(resultClass);
-    final Class<?> boxedType = Primitives.wrap(resultClass);
+  @Nullable
+  private static Converter<List<String>, Object> createPrimitiveTypeConverter(final Class<?> resultClass) {
+    Object defaultValue = defaultValue(resultClass);
 
-    if (!Primitives.isWrapperType(boxedType)) {
+    if (defaultValue == null) {
+      // For primitive type, the default value shouldn't be null
       return null;
     }
 
     return new BasicConverter(defaultValue) {
       @Override
       protected Object convert(String value) throws Exception {
-        Method method = PRIMITIVES_PARSE_METHODS.get(boxedType);
-        if (method != null) {
-          // It's primitive/wrapper type (except char)
-          return method.invoke(null, value);
-        }
-        // One exception is char type
-        if (boxedType == Character.class) {
-          return value.charAt(0);
-        }
-
-        // Should not happen.
-        return null;
+        return valueOf(value, resultClass);
       }
     };
   }
@@ -191,10 +179,10 @@ public final class ParamConvertUtils {
    * @return A converter function or {@code null} if the given type doesn't have a public constructor that accepts
    *         a single String argument.
    */
-  private static Function<List<String>, Object> createStringConstructorConverter(Class<?> resultClass) {
+  private static Converter<List<String>, Object> createStringConstructorConverter(Class<?> resultClass) {
     try {
       final Constructor<?> constructor = resultClass.getConstructor(String.class);
-      return new BasicConverter(Defaults.defaultValue(resultClass)) {
+      return new BasicConverter(defaultValue(resultClass)) {
         @Override
         protected Object convert(String value) throws Exception {
           return constructor.newInstance(value);
@@ -212,7 +200,19 @@ public final class ParamConvertUtils {
    * @return A converter function or {@code null} if the given type doesn't have a public static method
    *         named {@code valueOf} or {@code fromString} that accepts a single String argument.
    */
-  private static Function<List<String>, Object> createStringMethodConverter(Class<?> resultClass) {
+  private static Converter<List<String>, Object> createStringMethodConverter(Class<?> resultClass) {
+    // A special case for Character type, as it doesn't have a valueOf(String) method
+    if (resultClass == Character.class) {
+      return new BasicConverter(defaultValue(resultClass)) {
+        @Nullable
+        @Override
+        Object convert(String value) throws Exception {
+          return value.length() >= 1 ? value.charAt(0) : null;
+        }
+      };
+    }
+
+
     Method method;
     try {
       method = resultClass.getMethod("valueOf", String.class);
@@ -225,7 +225,7 @@ public final class ParamConvertUtils {
     }
 
     final Method convertMethod = method;
-    return new BasicConverter(Defaults.defaultValue(resultClass)) {
+    return new BasicConverter(defaultValue(resultClass)) {
       @Override
       protected Object convert(String value) throws Exception {
         return convertMethod.invoke(null, value);
@@ -240,8 +240,8 @@ public final class ParamConvertUtils {
    *         {@link List}, {@link Set} or {@link SortedSet}. Also, for {@link SortedSet} type, if the element type
    *         doesn't implements {@link Comparable}, {@code null} is returned.
    */
-  private static Function<List<String>, Object> createCollectionConverter(TypeToken<?> resultType) {
-    final Class<?> rawType = resultType.getRawType();
+  private static Converter<List<String>, Object> createCollectionConverter(Type resultType) {
+    final Class<?> rawType = getRawClass(resultType);
 
     // Collection. It must be List or Set
     if (rawType != List.class && rawType != Set.class && rawType != SortedSet.class) {
@@ -249,81 +249,148 @@ public final class ParamConvertUtils {
     }
 
     // Must be ParameterizedType
-    if (!(resultType.getType() instanceof ParameterizedType)) {
+    if (!(resultType instanceof ParameterizedType)) {
       return null;
     }
 
     // Must have 1 type parameter
-    ParameterizedType type = (ParameterizedType) resultType.getType();
+    ParameterizedType type = (ParameterizedType) resultType;
     if (type.getActualTypeArguments().length != 1) {
       return null;
     }
 
     // For SortedSet, the entry type must be Comparable.
     Type elementType = type.getActualTypeArguments()[0];
-    if (rawType == SortedSet.class && !Comparable.class.isAssignableFrom(TypeToken.of(elementType).getRawType())) {
+    if (rawType == SortedSet.class && !Comparable.class.isAssignableFrom(getRawClass(elementType))) {
       return null;
     }
 
     // Get the converter for the collection element.
-    final Function<List<String>, Object> elementConverter = createQueryParamConverter(elementType);
+    final Converter<List<String>, Object> elementConverter = createQueryParamConverter(elementType);
     if (elementConverter == null) {
       return null;
     }
 
-    return new Function<List<String>, Object>() {
+    return new Converter<List<String>, Object>() {
       @Override
-      public Object apply(List<String> values) {
-        ImmutableCollection.Builder<? extends Comparable> builder;
+      public Object convert(List<String> values) throws Exception {
+        Collection<? extends Comparable> collection;
         if (rawType == List.class) {
-          builder = ImmutableList.builder();
+          collection = new ArrayList<>();
         } else if (rawType == Set.class) {
-          builder = ImmutableSet.builder();
+          collection = new LinkedHashSet<>();
         } else {
-          builder = ImmutableSortedSet.naturalOrder();
+          collection = new TreeSet<>();
         }
 
         for (String value : values) {
-          add(builder, elementConverter.apply(ImmutableList.of(value)));
+          add(collection, elementConverter.convert(Collections.singletonList(value)));
         }
-        return builder.build();
+        return collection;
       }
 
       @SuppressWarnings("unchecked")
-      private <T> void add(ImmutableCollection.Builder<T> builder, Object element) {
+      private <T> void add(Collection<T> builder, Object element) {
         builder.add((T) element);
       }
     };
   }
 
   /**
+   * Returns the default value for the given class type based on the Java language definition.
+   */
+  @Nullable
+  private static Object defaultValue(Class<?> cls) {
+    return PRIMITIVE_DEFAULTS.get(cls);
+  }
+
+  /**
+   * Returns the value of the primitive type from the given string value.
+   *
+   * @param value the value to parse
+   * @param cls the primitive type class
+   * @return the boxed type value or {@code null} if the given class is not a primitive type
+   */
+  @Nullable
+  private static Object valueOf(String value, Class<?> cls) {
+    if (cls == Boolean.TYPE) {
+      return Boolean.valueOf(value);
+    }
+    if (cls == Character.TYPE) {
+      return value.length() >= 1 ? value.charAt(0) : defaultValue(char.class);
+    }
+    if (cls == Byte.TYPE) {
+      return Byte.valueOf(value);
+    }
+    if (cls == Short.TYPE) {
+      return Short.valueOf(value);
+    }
+    if (cls == Integer.TYPE) {
+      return Integer.valueOf(value);
+    }
+    if (cls == Long.TYPE) {
+      return Long.valueOf(value);
+    }
+    if (cls == Float.TYPE) {
+      return Float.valueOf(value);
+    }
+    if (cls == Double.TYPE) {
+      return Double.valueOf(value);
+    }
+    return null;
+  }
+
+  /**
+   * Returns the raw class of the given type.
+   */
+  private static Class<?> getRawClass(Type type) {
+    if (type instanceof Class) {
+      return (Class<?>) type;
+    }
+    if (type instanceof ParameterizedType) {
+      return getRawClass(((ParameterizedType) type).getRawType());
+    }
+    // For TypeVariable and WildcardType, returns the first upper bound.
+    if (type instanceof TypeVariable) {
+      return getRawClass(((TypeVariable) type).getBounds()[0]);
+    }
+    if (type instanceof WildcardType) {
+      return getRawClass(((WildcardType) type).getUpperBounds()[0]);
+    }
+    if (type instanceof GenericArrayType) {
+      Class<?> componentClass = getRawClass(((GenericArrayType) type).getGenericComponentType());
+      return Array.newInstance(componentClass, 0).getClass();
+    }
+    // This shouldn't happen as we captured all implementations of Type above (as or Java 8)
+    throw new IllegalArgumentException("Unsupported type " + type + " of type class " + type.getClass());
+  }
+
+  /**
    * A converter that converts first String value from a List of String.
    */
-  private abstract static class BasicConverter implements Function<List<String>, Object> {
+  private abstract static class BasicConverter implements Converter<List<String>, Object> {
 
     private final Object defaultValue;
 
-    protected BasicConverter(Object defaultValue) {
+    BasicConverter(Object defaultValue) {
       this.defaultValue = defaultValue;
     }
 
+    @Nullable
     @Override
-    public final Object apply(List<String> values) {
+    public final Object convert(List<String> values) throws Exception {
       if (values.isEmpty()) {
         return getDefaultValue();
       }
-      try {
-        return convert(values.get(0));
-      } catch (Exception e) {
-        throw Throwables.propagate(e);
-      }
+      return convert(values.get(0));
     }
 
-    protected Object getDefaultValue() {
+    Object getDefaultValue() {
       return defaultValue;
     }
 
-    protected abstract Object convert(String value) throws Exception;
+    @Nullable
+    abstract Object convert(String value) throws Exception;
   }
 
   private ParamConvertUtils() {

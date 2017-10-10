@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,13 +16,13 @@
 
 package co.cask.http;
 
-import com.google.common.collect.Multimap;
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.ByteBuffer;
-import javax.annotation.Nullable;
 
 /**
  * HttpResponder is used to send response back to clients.
@@ -51,9 +51,9 @@ public interface HttpResponder {
    *
    * @param status status of the Http response.
    * @param data string data to be sent back.
-   * @param headers Headers to send.
+   * @param headers additional headers to send with the response.
    */
-  void sendString(HttpResponseStatus status, String data, @Nullable Multimap<String, String> headers);
+  void sendString(HttpResponseStatus status, String data, HttpHeaders headers);
 
   /**
    * Send only a status code back to client without any content.
@@ -66,66 +66,84 @@ public interface HttpResponder {
    * Send only a status code back to client without any content.
    *
    * @param status status of the Http response.
-   * @param headers Headers to send.
+   * @param headers additional headers to send with the response.
    */
-  void sendStatus(HttpResponseStatus status, @Nullable Multimap<String, String> headers);
+  void sendStatus(HttpResponseStatus status, HttpHeaders headers);
 
   /**
-   * Send a response containing raw bytes. Sets "application/octet-stream" as content type header.
+   * Send a response containing raw bytes. Default content type is "application/octet-stream", but can be
+   * overridden by the headers parameter.
    *
    * @param status status of the Http response.
    * @param bytes bytes to be sent back.
-   * @param headers headers to be sent back. This will overwrite any headers set by the framework.
+   * @param headers additional headers to send with the response.
    */
-  void sendByteArray(HttpResponseStatus status, byte[] bytes, @Nullable Multimap<String, String> headers);
+  void sendByteArray(HttpResponseStatus status, byte[] bytes, HttpHeaders headers);
 
   /**
    * Sends a response containing raw bytes. Default content type is "application/octet-stream", but can be
-   * overridden in the headers.
+   * overridden by the headers parameter.
    *
    * @param status status of the Http response
    * @param buffer bytes to send
-   * @param headers Headers to send.
+   * @param headers additional headers to send with the response.
    */
-  void sendBytes(HttpResponseStatus status, ByteBuffer buffer, @Nullable Multimap<String, String> headers);
+  void sendBytes(HttpResponseStatus status, ByteBuffer buffer, HttpHeaders headers);
 
   /**
    * Respond to the client saying the response will be in chunks. The response body can be sent in chunks
    * using the {@link ChunkResponder} returned.
    *
-   * @param status  the status code to respond with
-   * @param headers additional headers to send with the response. May be null.
+   * @param status the status code to respond with
    */
-  ChunkResponder sendChunkStart(HttpResponseStatus status, @Nullable Multimap<String, String> headers);
+  ChunkResponder sendChunkStart(HttpResponseStatus status);
 
   /**
-   * Send response back to client.
+   * Respond to the client saying the response will be in chunks. The response body can be sent in chunks
+   * using the {@link ChunkResponder} returned.
+   *
+   * @param status the status code to respond with
+   * @param headers additional headers to send with the response.
+   */
+  ChunkResponder sendChunkStart(HttpResponseStatus status, HttpHeaders headers);
+
+  /**
+   * Send response back to client. Default content type is "application/octet-stream", but can be
+   * overridden by the headers parameter.
    *
    * @param status Status of the response.
    * @param content Content to be sent back.
-   * @param contentType Type of content.
-   * @param headers Headers to be sent back.
+   * @param headers additional headers to send with the response.
    */
-  void sendContent(HttpResponseStatus status, ByteBuf content, String contentType,
-                   @Nullable Multimap<String, String> headers);
-
+  void sendContent(HttpResponseStatus status, ByteBuf content, HttpHeaders headers);
 
   /**
-   * Sends a file content back to client with response status 200.
+   * Sends a file content back to client with response status 200 with content type as "application/octet-stream".
    *
    * @param file The file to send
-   * @param headers Headers to be sent back.
+   * @throws IOException if failed to open and read the file
    */
-  void sendFile(File file, @Nullable Multimap<String, String> headers);
+  void sendFile(File file) throws IOException;
+
+  /**
+   * Sends a file content back to client with response status 200. Default content type is "application/octet-stream",
+   * but can be overridden by the headers parameter.
+   *
+   * @param file The file to send
+   * @param headers additional headers to send with the response.
+   * @throws IOException if failed to open and read the file
+   */
+  void sendFile(File file, HttpHeaders headers) throws IOException;
 
   /**
    * Sends response back to client. The response body is produced by the given {@link BodyProducer}. This method
    * will return immediate after it is called. Invocation of methods on the given {@link BodyProducer} will be
-   * triggered from another thread.
+   * triggered from another thread. Default content type is "application/octet-stream", but can be
+   * overridden by the headers parameter.
    *
    * @param status Status of the response.
    * @param bodyProducer a {@link BodyProducer} to produce response body.
-   * @param headers headers to be sent back.
+   * @param headers additional headers to send with the response.
    */
-  void sendContent(HttpResponseStatus status, BodyProducer bodyProducer, @Nullable Multimap<String, String> headers);
+  void sendContent(HttpResponseStatus status, BodyProducer bodyProducer, HttpHeaders headers);
 }

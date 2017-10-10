@@ -19,21 +19,19 @@ package co.cask.http.internal;
 import co.cask.http.AbstractHttpResponder;
 import co.cask.http.BodyProducer;
 import co.cask.http.ChunkResponder;
-import com.google.common.collect.Multimap;
-import com.google.common.io.Files;
-import com.google.common.io.InputSupplier;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import javax.annotation.Nullable;
 
 /**
  * InternalHttpResponder is used when a handler is being called internally by some other handler, and thus there
@@ -43,16 +41,10 @@ public class InternalHttpResponder extends AbstractHttpResponder {
 
   private static final Logger LOG = LoggerFactory.getLogger(InternalHttpResponder.class);
 
-  private int statusCode;
-  private InputSupplier<? extends InputStream> inputSupplier;
-
-  public InternalHttpResponder() {
-    statusCode = 0;
-  }
+  private InternalHttpResponse response;
 
   @Override
-  public ChunkResponder sendChunkStart(HttpResponseStatus status, @Nullable Multimap<String, String> headers) {
-    statusCode = status.code();
+  public ChunkResponder sendChunkStart(final HttpResponseStatus status, HttpHeaders headers) {
     return new ChunkResponder() {
 
       private ByteBuf contentChunks = Unpooled.EMPTY_BUFFER;
@@ -77,28 +69,38 @@ public class InternalHttpResponder extends AbstractHttpResponder {
           return;
         }
         closed = true;
-        inputSupplier = createContentSupplier(contentChunks);
+        response = new AbstractInternalResponse(status.code()) {
+          @Override
+          public InputStream openInputStream() throws IOException {
+            return new ByteBufInputStream(contentChunks.duplicate());
+          }
+        };
       }
     };
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, @Nullable ByteBuf content, String contentType,
-                          @Nullable Multimap<String, String> headers) {
-    statusCode = status.code();
-    inputSupplier = createContentSupplier(content == null ? Unpooled.EMPTY_BUFFER : content);
+  public void sendContent(HttpResponseStatus status, final ByteBuf content, HttpHeaders headers) {
+    response = new AbstractInternalResponse(status.code()) {
+      @Override
+      public InputStream openInputStream() throws IOException {
+        return new ByteBufInputStream(content.duplicate());
+      }
+    };
   }
 
   @Override
-  public void sendFile(File file, @Nullable Multimap<String, String> headers) {
-    statusCode = HttpResponseStatus.OK.code();
-    inputSupplier = Files.newInputStreamSupplier(file);
+  public void sendFile(final File file, HttpHeaders headers) {
+    response = new AbstractInternalResponse(HttpResponseStatus.OK.code()) {
+      @Override
+      public InputStream openInputStream() throws IOException {
+        return new FileInputStream(file);
+      }
+    };
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer,
-                          @Nullable Multimap<String, String> headers) {
-    statusCode = status.code();
+  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer, HttpHeaders headers) {
     // Buffer all contents produced by the body producer
     ByteBuf contentChunks = Unpooled.EMPTY_BUFFER;
     try {
@@ -109,7 +111,13 @@ public class InternalHttpResponder extends AbstractHttpResponder {
       }
 
       bodyProducer.finished();
-      inputSupplier = createContentSupplier(contentChunks);
+      final ByteBuf finalContentChunks = contentChunks;
+      response = new AbstractInternalResponse(status.code()) {
+        @Override
+        public InputStream openInputStream() throws IOException {
+          return new ByteBufInputStream(finalContentChunks.duplicate());
+        }
+      };
     } catch (Throwable t) {
       try {
         bodyProducer.handleError(t);
@@ -119,19 +127,31 @@ public class InternalHttpResponder extends AbstractHttpResponder {
     }
   }
 
+  /**
+   * Returns the the last {@link InternalHttpResponse} created via one of the send methods.
+   *
+   * @throws IllegalStateException if there is no {@link InternalHttpResponse} available
+   */
   public InternalHttpResponse getResponse() {
-    return new BasicInternalHttpResponse(statusCode, inputSupplier);
+    if (response == null) {
+      throw new IllegalStateException("No InternalHttpResponse available");
+    }
+    return response;
   }
 
-  private InputSupplier<InputStream> createContentSupplier(ByteBuf content) {
-    final ByteBuf responseContent = content.duplicate();    // Have independent pointers.
-    responseContent.markReaderIndex();
-    return new InputSupplier<InputStream>() {
-      @Override
-      public InputStream getInput() throws IOException {
-        responseContent.resetReaderIndex();
-        return new ByteBufInputStream(responseContent);
-      }
-    };
+  /**
+   * Abstract implementation of {@link InternalHttpResponse}.
+   */
+  private abstract static class AbstractInternalResponse implements InternalHttpResponse {
+    private final int statusCode;
+
+    AbstractInternalResponse(int statusCode) {
+      this.statusCode = statusCode;
+    }
+
+    @Override
+    public int getStatusCode() {
+      return statusCode;
+    }
   }
 }

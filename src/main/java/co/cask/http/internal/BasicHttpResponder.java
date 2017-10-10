@@ -20,11 +20,6 @@ import co.cask.http.AbstractHttpResponder;
 import co.cask.http.BodyProducer;
 import co.cask.http.ChunkResponder;
 import co.cask.http.HttpResponder;
-import com.google.common.base.Charsets;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.Multimap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
@@ -35,11 +30,13 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.FileRegion;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpChunkedInput;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
@@ -53,8 +50,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.Collection;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -76,49 +72,50 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   }
 
   @Override
-  public ChunkResponder sendChunkStart(HttpResponseStatus status, @Nullable Multimap<String, String> headers) {
-    Preconditions.checkArgument((status.code() >= 200 && status.code() < 210) , "Http Chunk Failure");
-    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
-
-    setCustomHeaders(response, headers);
-
-    if (!hasContentLength(headers)) {
-      response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+  public ChunkResponder sendChunkStart(HttpResponseStatus status, HttpHeaders headers) {
+    if (status.code() < 200 || status.code() >= 210) {
+      throw new IllegalArgumentException("Status code must be between 200 and 210. Status code provided is "
+                                           + status.code());
     }
 
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
+    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+    addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
+
+    if (HttpUtil.getContentLength(response, -1L) < 0) {
+      HttpUtil.setTransferEncodingChunked(response, true);
+    }
+
+    checkNotResponded();
     channel.write(response);
     return new ChannelChunkResponder(channel);
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, @Nullable ByteBuf content, String contentType,
-                          @Nullable Multimap<String, String> headers) {
-    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status,
-                                                            content == null ? Unpooled.EMPTY_BUFFER : content);
-    setCustomHeaders(response, headers);
-    if (contentType != null) {
-      response.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
-    }
-    HttpUtil.setContentLength(response, response.content().readableBytes());
+  public void sendContent(HttpResponseStatus status, ByteBuf content, HttpHeaders headers) {
+    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, content);
+    response.headers().setAll(headers);
+    HttpUtil.setContentLength(response, content.readableBytes());
 
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
+    if (content.isReadable()) {
+      addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
+    }
+
+    checkNotResponded();
     channel.writeAndFlush(response);
   }
 
   @Override
-  public void sendFile(File file, @Nullable Multimap<String, String> headers) {
+  public void sendFile(File file, HttpHeaders headers) throws IOException {
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+    addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
 
-    setCustomHeaders(response, headers);
     HttpUtil.setTransferEncodingChunked(response, false);
     HttpUtil.setContentLength(response, file.length());
 
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
-
+    // Open the file first to make sure it is readable before sending out the response
+    RandomAccessFile raf = new RandomAccessFile(file, "r");
     try {
-      // Open the file first to make sure it is readable before sending out the response
-      RandomAccessFile raf = new RandomAccessFile(file, "r");
+      checkNotResponded();
 
       // Write the initial line and the header.
       channel.write(response);
@@ -132,36 +129,38 @@ final class BasicHttpResponder extends AbstractHttpResponder {
       } else {
         // The FileRegion will close the file channel when it is done sending.
         FileRegion region = new DefaultFileRegion(raf.getChannel(), 0, file.length());
-
-        // Write the initial line and the header.
-        channel.write(response);
         channel.write(region);
         channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
       }
-    } catch (IOException e) {
-      throw Throwables.propagate(e);
+    } catch (Throwable t) {
+      try {
+        raf.close();
+      } catch (IOException ex) {
+        t.addSuppressed(ex);
+      }
+      throw t;
     }
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, final BodyProducer bodyProducer,
-                          @Nullable Multimap<String, String> headers) {
+  public void sendContent(HttpResponseStatus status, final BodyProducer bodyProducer, HttpHeaders headers) {
     final long contentLength;
     try {
       contentLength = bodyProducer.getContentLength();
     } catch (Throwable t) {
       bodyProducer.handleError(t);
       // Response with error and close the connection
-      sendContent(HttpResponseStatus.INTERNAL_SERVER_ERROR,
-                  Unpooled.wrappedBuffer(
-                    Charsets.UTF_8.encode("Failed to determined content length. Cause: " + t.getMessage())),
-                  "text/plain",
-                  ImmutableMultimap.of(HttpHeaderNames.CONNECTION.toString(), HttpHeaderValues.CLOSE.toString()));
+      sendContent(
+        HttpResponseStatus.INTERNAL_SERVER_ERROR,
+        Unpooled.copiedBuffer("Failed to determined content length. Cause: " + t.getMessage(), StandardCharsets.UTF_8),
+        new DefaultHttpHeaders()
+          .set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE)
+          .set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=utf-8"));
       return;
     }
 
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-    setCustomHeaders(response, headers);
+    addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
 
     if (contentLength < 0L) {
       HttpUtil.setTransferEncodingChunked(response, true);
@@ -170,7 +169,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
       HttpUtil.setContentLength(response, contentLength);
     }
 
-    Preconditions.checkArgument(responded.compareAndSet(false, true), "Response has been already sent");
+    checkNotResponded();
 
     // Streams the data produced by the given BodyProducer
     channel.writeAndFlush(response).addListener(new ChannelFutureListener() {
@@ -182,7 +181,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
           channel.close();
           return;
         }
-        channel.writeAndFlush(new HttpChunkedInput(new BodyProducerChunkedInput(bodyProducer)))
+        channel.writeAndFlush(new HttpChunkedInput(new BodyProducerChunkedInput(bodyProducer, contentLength)))
           .addListener(createBodyProducerCompletionListener(bodyProducer));
       }
     });
@@ -223,28 +222,10 @@ final class BasicHttpResponder extends AbstractHttpResponder {
     }
   }
 
-  private void setCustomHeaders(HttpResponse response, @Nullable Multimap<String, String> headers) {
-    // Add headers. They will override all headers set by the framework
-    if (headers != null) {
-      for (Map.Entry<String, Collection<String>> entry : headers.asMap().entrySet()) {
-        response.headers().set(entry.getKey(), entry.getValue());
-      }
+  private void checkNotResponded() {
+    if (!responded.compareAndSet(false, true)) {
+      throw new IllegalStateException("Response has already been sent");
     }
-  }
-
-  /**
-   * Returns true if the {@code Content-Length} header is set.
-   */
-  private boolean hasContentLength(@Nullable Multimap<String, String> headers) {
-    if (headers == null) {
-      return false;
-    }
-    for (String key : headers.keySet()) {
-      if (HttpHeaderNames.CONTENT_LENGTH.contentEqualsIgnoreCase(key)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   /**
@@ -258,9 +239,9 @@ final class BasicHttpResponder extends AbstractHttpResponder {
     private ByteBuf nextChunk;
     private boolean completed;
 
-    private BodyProducerChunkedInput(BodyProducer bodyProducer) {
+    private BodyProducerChunkedInput(BodyProducer bodyProducer, long length) {
       this.bodyProducer = bodyProducer;
-      this.length = bodyProducer.getContentLength();
+      this.length = length;
     }
 
     @Override
@@ -310,7 +291,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
 
     @Override
     public long progress() {
-      return bytesProduced;
+      return length >= 0 ? bytesProduced : 0;
     }
   }
 }

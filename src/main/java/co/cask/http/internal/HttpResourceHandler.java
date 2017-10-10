@@ -23,12 +23,6 @@ import co.cask.http.HandlerHook;
 import co.cask.http.HttpHandler;
 import co.cask.http.HttpResponder;
 import co.cask.http.URLRewriter;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import io.netty.handler.codec.http.FullHttpMessage;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
@@ -40,8 +34,12 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.ws.rs.DELETE;
@@ -78,8 +76,8 @@ public final class HttpResourceHandler implements HttpHandler {
   public HttpResourceHandler(Iterable<? extends HttpHandler> handlers, Iterable<? extends HandlerHook> handlerHooks,
                              URLRewriter urlRewriter, ExceptionHandler exceptionHandler) {
     //Store the handlers to call init and destroy on all handlers.
-    this.handlers = ImmutableList.copyOf(handlers);
-    this.handlerHooks = ImmutableList.copyOf(handlerHooks);
+    this.handlers = copyOf(handlers);
+    this.handlerHooks = copyOf(handlerHooks);
     this.urlRewriter = urlRewriter;
 
     for (HttpHandler handler : handlers) {
@@ -109,12 +107,18 @@ public final class HttpResourceHandler implements HttpHandler {
           }
           String absolutePath = String.format("%s/%s", basePath, relativePath);
           Set<HttpMethod> httpMethods = getHttpMethods(method);
-          Preconditions.checkArgument(httpMethods.size() >= 1,
-                                      String.format("No HttpMethod found for method: %s", method.getName()));
-          HttpResourceModel resourceModel = new HttpResourceModel(httpMethods, absolutePath, method,
-                                                                  handler, exceptionHandler);
-          LOG.trace("Adding resource model {}", resourceModel);
-          patternRouter.add(absolutePath, resourceModel);
+          if (httpMethods.isEmpty()) {
+            throw new IllegalArgumentException("No HttpMethod found for handler method " + method);
+          }
+          try {
+            HttpResourceModel resourceModel = new HttpResourceModel(httpMethods, absolutePath, method,
+                                                                    handler, exceptionHandler);
+            LOG.trace("Adding resource model {}", resourceModel);
+            patternRouter.add(absolutePath, resourceModel);
+          } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to create http handler from method "
+                                                 + method + " in handler class " + handler.getClass().getName(), e);
+          }
         } else {
           LOG.trace("Not adding method {}({}) to path routing like. HTTP calls will not be routed to this method",
                     method.getName(), params);
@@ -131,7 +135,7 @@ public final class HttpResourceHandler implements HttpHandler {
    * @return String representation of HttpMethod from annotations or emptyString as a default.
    */
   private Set<HttpMethod> getHttpMethods(Method method) {
-    Set<HttpMethod> httpMethods = Sets.newHashSet();
+    Set<HttpMethod> httpMethods = new HashSet<>();
 
     if (method.isAnnotationPresent(GET.class)) {
       httpMethods.add(HttpMethod.GET);
@@ -146,7 +150,7 @@ public final class HttpResourceHandler implements HttpHandler {
       httpMethods.add(HttpMethod.DELETE);
     }
 
-    return ImmutableSet.copyOf(httpMethods);
+    return Collections.unmodifiableSet(httpMethods);
   }
 
   /**
@@ -305,9 +309,8 @@ public final class HttpResourceHandler implements HttpHandler {
                         HttpMethod targetHttpMethod, String requestUri) {
 
     LOG.trace("Routable destinations for request {}: {}", requestUri, routableDestinations);
-    Iterable<String> requestUriParts = Splitter.on('/').omitEmptyStrings().split(requestUri);
-    List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> matchedDestinations =
-      Lists.newArrayListWithExpectedSize(routableDestinations.size());
+    Iterable<String> requestUriParts = splitAndOmitEmpty(requestUri, '/');
+    List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> matchedDestinations = new ArrayList<>();
     long maxScore = 0;
 
     for (PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel> destination : routableDestinations) {
@@ -315,8 +318,7 @@ public final class HttpResourceHandler implements HttpHandler {
 
       for (HttpMethod httpMethod : resourceModel.getHttpMethod()) {
         if (targetHttpMethod.equals(httpMethod)) {
-          long score = getWeightedMatchScore(requestUriParts,
-                                             Splitter.on('/').omitEmptyStrings().split(resourceModel.getPath()));
+          long score = getWeightedMatchScore(requestUriParts, splitAndOmitEmpty(resourceModel.getPath(), '/'));
           LOG.trace("Max score = {}. Weighted score for {} is {}. ", maxScore, destination, score);
           if (score > maxScore) {
             maxScore = score;
@@ -385,5 +387,69 @@ public final class HttpResourceHandler implements HttpHandler {
         LOG.warn("Exception raised in calling handler.destroy() for handler {}", handler, t);
       }
     }
+  }
+
+  private static <T> List<T> copyOf(Iterable<? extends T> iterable) {
+    List<T> list = new ArrayList<>();
+    for (T item : iterable) {
+      list.add(item);
+    }
+    return Collections.unmodifiableList(list);
+  }
+
+  /**
+   * Helper method to split a string by a given character, with empty parts omitted.
+   */
+  private static Iterable<String> splitAndOmitEmpty(final String str, final char splitChar) {
+    return new Iterable<String>() {
+      @Override
+      public Iterator<String> iterator() {
+        return new Iterator<String>() {
+
+          int startIdx = 0;
+          String next = null;
+
+          @Override
+          public boolean hasNext() {
+            while (next == null && startIdx < str.length()) {
+              int idx = str.indexOf(splitChar, startIdx);
+              if (idx == startIdx) {
+                // Omit empty string
+                startIdx++;
+                continue;
+              }
+              if (idx >= 0) {
+                // Found the next part
+                next = str.substring(startIdx, idx);
+                startIdx = idx;
+              } else {
+                // The last part
+                if (startIdx < str.length()) {
+                  next = str.substring(startIdx);
+                  startIdx = str.length();
+                }
+                break;
+              }
+            }
+            return next != null;
+          }
+
+          @Override
+          public String next() {
+            if (hasNext()) {
+              String next = this.next;
+              this.next = null;
+              return next;
+            }
+            throw new NoSuchElementException("No more element");
+          }
+
+          @Override
+          public void remove() {
+            throw new UnsupportedOperationException("Remove not supported");
+          }
+        };
+      }
+    };
   }
 }

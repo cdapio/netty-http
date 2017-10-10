@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -17,10 +17,6 @@
 package co.cask.http;
 
 import co.cask.http.internal.HandlerInfo;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.Service;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.AfterClass;
@@ -34,6 +30,9 @@ import org.slf4j.LoggerFactory;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
@@ -54,15 +53,12 @@ public class HandlerHookTest {
   public static void setup() throws Exception {
 
     NettyHttpService.Builder builder = NettyHttpService.builder("test-hook");
-    builder.addHttpHandlers(ImmutableList.of(new TestHandler()));
-    builder.setHandlerHooks(ImmutableList.of(handlerHook1, handlerHook2));
+    builder.setHttpHandlers(new TestHandler());
+    builder.setHandlerHooks(Arrays.asList(handlerHook1, handlerHook2));
     builder.setHost(hostname);
 
     service = builder.build();
-    service.startAndWait();
-    Service.State state = service.state();
-    Assert.assertEquals(Service.State.RUNNING, state);
-
+    service.start();
     int port = service.getBindAddress().getPort();
     baseURI = URI.create(String.format("http://%s:%d", hostname, port));
   }
@@ -160,7 +156,7 @@ public class HandlerHookTest {
 
   @AfterClass
   public static void teardown() throws Exception {
-    service.stopAndWait();
+    service.stop();
   }
 
   private void awaitPostHook() throws Exception {
@@ -227,11 +223,11 @@ public class HandlerHookTest {
   }
 
   private static int doGet(String resource) throws Exception {
-    return doGet(resource, ImmutableMap.<String, String>of());
+    return doGet(resource, Collections.<String, String>emptyMap());
   }
 
   private static int doGet(String resource, String key, String value, String...keyValues) throws Exception {
-    Map<String, String> headerMap = Maps.newHashMap();
+    Map<String, String> headerMap = new HashMap<>();
     headerMap.put(key, value);
 
     for (int i = 0; i < keyValues.length; i += 2) {

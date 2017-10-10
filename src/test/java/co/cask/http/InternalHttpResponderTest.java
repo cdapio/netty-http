@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -18,11 +18,12 @@ package co.cask.http;
 
 import co.cask.http.internal.InternalHttpResponder;
 import co.cask.http.internal.InternalHttpResponse;
-import com.google.common.base.Charsets;
-import com.google.common.collect.HashMultimap;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.EmptyHttpHeaders;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Assert;
 import org.junit.Test;
@@ -30,6 +31,9 @@ import org.junit.Test;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import javax.annotation.Nullable;
 
 /**
  *
@@ -45,9 +49,10 @@ public class InternalHttpResponderTest {
 
     InternalHttpResponse response = responder.getResponse();
     Assert.assertEquals(HttpResponseStatus.OK.code(), response.getStatusCode());
-    JsonObject responseData = new Gson().fromJson(
-      new InputStreamReader(response.getInputSupplier().getInput()), JsonObject.class);
-    Assert.assertEquals(output, responseData);
+    try (Reader reader = new InputStreamReader(response.openInputStream(), "UTF-8")) {
+      JsonObject responseData = new Gson().fromJson(reader, JsonObject.class);
+      Assert.assertEquals(output, responseData);
+    }
   }
 
   @Test
@@ -69,8 +74,7 @@ public class InternalHttpResponderTest {
   @Test
   public void testSendByteArray() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
-    responder.sendByteArray(
-      HttpResponseStatus.OK, "abc".getBytes(Charsets.UTF_8), HashMultimap.<String, String>create());
+    responder.sendByteArray(HttpResponseStatus.OK, "abc".getBytes(StandardCharsets.UTF_8), EmptyHttpHeaders.INSTANCE);
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
   }
@@ -87,9 +91,9 @@ public class InternalHttpResponderTest {
   public void testChunks() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
     ChunkResponder chunkResponder = responder.sendChunkStart(HttpResponseStatus.OK, null);
-    chunkResponder.sendChunk(Unpooled.wrappedBuffer("a".getBytes(Charsets.UTF_8)));
-    chunkResponder.sendChunk(Unpooled.wrappedBuffer("b".getBytes(Charsets.UTF_8)));
-    chunkResponder.sendChunk(Unpooled.wrappedBuffer("c".getBytes(Charsets.UTF_8)));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("a".getBytes(StandardCharsets.UTF_8)));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("b".getBytes(StandardCharsets.UTF_8)));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("c".getBytes(StandardCharsets.UTF_8)));
     chunkResponder.close();
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
@@ -98,22 +102,21 @@ public class InternalHttpResponderTest {
   @Test
   public void testSendContent() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
-    responder.sendContent(HttpResponseStatus.OK, Unpooled.wrappedBuffer("abc".getBytes(Charsets.UTF_8)),
-                          "contentType", HashMultimap.<String, String>create());
+    responder.sendContent(HttpResponseStatus.OK, Unpooled.wrappedBuffer("abc".getBytes(StandardCharsets.UTF_8)),
+                          new DefaultHttpHeaders().set(HttpHeaderNames.CONTENT_TYPE, "contentType"));
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
   }
 
-  private void validateResponse(InternalHttpResponse response, HttpResponseStatus expectedStatus, String expectedData)
+  private void validateResponse(InternalHttpResponse response, HttpResponseStatus expectedStatus,
+                                @Nullable String expectedData)
     throws IOException {
     int code = response.getStatusCode();
     Assert.assertEquals(expectedStatus.code(), code);
     if (expectedData != null) {
       // read it twice to make sure the input supplier gives the full stream more than once.
       for (int i = 0; i < 2; i++) {
-        try (
-          BufferedReader reader = new BufferedReader(new InputStreamReader(response.getInputSupplier().getInput()))
-        ) {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.openInputStream(), "UTF-8"))) {
           String data = reader.readLine();
           Assert.assertEquals(expectedData, data);
         }

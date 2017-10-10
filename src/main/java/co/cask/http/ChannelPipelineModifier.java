@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2017 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,17 +16,18 @@
 
 package co.cask.http;
 
-import co.cask.http.internal.HttpResourceHandler;
+import io.netty.channel.ChannelPipeline;
 
 /**
- * Place holder for information about the environment. Will be passed in during lifecycle management calls of
- * HttpHandlers. Currently has methods to get RunTimeArguments.
+ * This class allows user modify a {@link ChannelPipeline} when it gets initialized, which happens on every
+ * new channel
  */
-public interface HandlerContext {
+public abstract class ChannelPipelineModifier {
 
   /**
-   * @return the {@link HttpResourceHandler} associated with this context,
-   * used to let one handler call another internally.
+   * Modifies the given {@link ChannelPipeline}.
+   *
+   * @param pipeline the pipeline to be modified
    */
-  HttpResourceHandler getHttpResourceHandler();
+  public abstract void modify(ChannelPipeline pipeline);
 }

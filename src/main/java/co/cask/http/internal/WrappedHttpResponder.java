@@ -16,12 +16,13 @@
 
 package co.cask.http.internal;
 
+import co.cask.http.AbstractHttpResponder;
 import co.cask.http.BodyProducer;
 import co.cask.http.ChunkResponder;
 import co.cask.http.HandlerHook;
 import co.cask.http.HttpResponder;
-import com.google.common.collect.Multimap;
 import io.netty.buffer.ByteBuf;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.slf4j.Logger;
@@ -30,12 +31,11 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import javax.annotation.Nullable;
 
 /**
  * Wrap HttpResponder to call post handler hook.
  */
-final class WrappedHttpResponder implements HttpResponder {
+final class WrappedHttpResponder extends AbstractHttpResponder {
   private static final Logger LOG = LoggerFactory.getLogger(WrappedHttpResponder.class);
 
   private final HttpResponder delegate;
@@ -51,51 +51,8 @@ final class WrappedHttpResponder implements HttpResponder {
     this.handlerInfo = handlerInfo;
   }
 
-
   @Override
-  public void sendJson(HttpResponseStatus status, String jsonString) {
-    delegate.sendJson(status, jsonString);
-    runHook(status);
-  }
-
-  @Override
-  public void sendString(HttpResponseStatus status, String data) {
-    delegate.sendString(status, data);
-    runHook(status);
-  }
-
-  @Override
-  public void sendString(HttpResponseStatus status, String data, @Nullable Multimap<String, String> headers) {
-    delegate.sendString(status, data, headers);
-    runHook(status);
-  }
-
-  @Override
-  public void sendStatus(HttpResponseStatus status) {
-    delegate.sendStatus(status);
-    runHook(status);
-  }
-
-  @Override
-  public void sendStatus(HttpResponseStatus status, Multimap<String, String> headers) {
-    delegate.sendStatus(status, headers);
-    runHook(status);
-  }
-
-  @Override
-  public void sendByteArray(HttpResponseStatus status, byte[] bytes, Multimap<String, String> headers) {
-    delegate.sendByteArray(status, bytes, headers);
-    runHook(status);
-  }
-
-  @Override
-  public void sendBytes(HttpResponseStatus status, ByteBuffer buffer, Multimap<String, String> headers) {
-    delegate.sendBytes(status, buffer, headers);
-    runHook(status);
-  }
-
-  @Override
-  public ChunkResponder sendChunkStart(final HttpResponseStatus status, Multimap<String, String> headers) {
+  public ChunkResponder sendChunkStart(final HttpResponseStatus status, HttpHeaders headers) {
     final ChunkResponder chunkResponder = delegate.sendChunkStart(status, headers);
     return new ChunkResponder() {
       @Override
@@ -117,21 +74,19 @@ final class WrappedHttpResponder implements HttpResponder {
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, ByteBuf content, String contentType,
-                          Multimap<String, String> headers) {
-    delegate.sendContent(status, content, contentType, headers);
+  public void sendContent(HttpResponseStatus status, ByteBuf content, HttpHeaders headers) {
+    delegate.sendContent(status, content, headers);
     runHook(status);
   }
 
   @Override
-  public void sendFile(File file, Multimap<String, String> headers) {
+  public void sendFile(File file, HttpHeaders headers) throws IOException {
     delegate.sendFile(file, headers);
     runHook(HttpResponseStatus.OK);
   }
 
   @Override
-  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer,
-                          @Nullable Multimap<String, String> headers) {
+  public void sendContent(HttpResponseStatus status, BodyProducer bodyProducer, HttpHeaders headers) {
     delegate.sendContent(status, bodyProducer, headers);
     runHook(status);
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2017 Cask Data, Inc.
+ * Copyright © 2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -14,19 +14,23 @@
  * the License.
  */
 
-package co.cask.http;
+package co.cask.http.internal;
 
-import co.cask.http.internal.HttpResourceHandler;
+import javax.annotation.Nullable;
 
 /**
- * Place holder for information about the environment. Will be passed in during lifecycle management calls of
- * HttpHandlers. Currently has methods to get RunTimeArguments.
+ * Converts an object of one type to another.
+ *
+ * @param <F> the source object type
+ * @param <T> the target object type
  */
-public interface HandlerContext {
+public interface Converter<F, T> {
 
   /**
-   * @return the {@link HttpResourceHandler} associated with this context,
-   * used to let one handler call another internally.
+   * Converts an object.
+   *
+   * @throws Exception if the conversion failed
    */
-  HttpResourceHandler getHttpResourceHandler();
+  @Nullable
+  T convert(F from) throws Exception;
 }

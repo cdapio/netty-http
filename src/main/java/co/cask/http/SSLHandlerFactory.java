@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,7 +16,6 @@
 
 package co.cask.http;
 
-import com.google.common.io.Closeables;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -24,7 +23,6 @@ import io.netty.handler.ssl.SslHandler;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyStore;
 import java.security.Security;
@@ -67,21 +65,12 @@ public class SSLHandlerFactory {
     }
   }
 
-  private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws IOException {
-    KeyStore ks = null;
-    InputStream is = new FileInputStream(keyStore);
-    try {
-      ks = KeyStore.getInstance("JKS");
+  private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws Exception {
+    try (InputStream is = new FileInputStream(keyStore)) {
+      KeyStore ks = KeyStore.getInstance("JKS");
       ks.load(is, keyStorePassword.toCharArray());
-    } catch (Exception ex) {
-      if (ex instanceof RuntimeException) {
-        throw ((RuntimeException) ex);
-      }
-      throw new IOException(ex);
-    } finally {
-      Closeables.closeQuietly(is);
+      return ks;
     }
-    return ks;
   }
 
   /**

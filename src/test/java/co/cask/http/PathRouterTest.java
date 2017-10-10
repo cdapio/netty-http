@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -17,11 +17,12 @@
 package co.cask.http;
 
 import co.cask.http.internal.PatternPathRouterWithGroups;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -108,8 +109,8 @@ public class PathRouterTest {
 
     routes = pathRouter.getDestinations("/multi/match/def");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(ImmutableSet.of("multi-match-def", "multi-match-*"),
-                 ImmutableSet.of(routes.get(0).getDestination(), routes.get(1).getDestination()));
+    Assert.assertEquals(new HashSet<>(Arrays.asList("multi-match-def", "multi-match-*")),
+                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
     Assert.assertTrue(routes.get(0).getGroupNameValues().isEmpty());
     Assert.assertTrue(routes.get(1).getGroupNameValues().isEmpty());
 
@@ -120,59 +121,69 @@ public class PathRouterTest {
 
     routes = pathRouter.getDestinations("/multi/maxmatch/id1");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(ImmutableSet.of("multi-max-match-id", "multi-max-match-*"),
-                 ImmutableSet.of(routes.get(0).getDestination(), routes.get(1).getDestination()));
-    //noinspection Assert.assertEqualsBetweenInconvertibleTypes
-    Assert.assertEquals(ImmutableSet.of(ImmutableMap.of("id", "id1"), ImmutableMap.<String, String>of()),
-                 ImmutableSet.of(routes.get(0).getGroupNameValues(), routes.get(1).getGroupNameValues())
+    Assert.assertEquals(new HashSet<>(Arrays.asList("multi-max-match-id", "multi-max-match-*")),
+                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+
+    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+                                                    Collections.<String, String>emptyMap())),
+                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                                                    routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/multi/maxmatch/foo");
     Assert.assertEquals(3, routes.size());
-    Assert.assertEquals(ImmutableSet.of("multi-max-match-id", "multi-max-match-*", "multi-max-match-foo"),
-                 ImmutableSet.of(routes.get(0).getDestination(), routes.get(1).getDestination(),
-                                 routes.get(2).getDestination()));
-    //noinspection Assert.assertEqualsBetweenInconvertibleTypes
-    Assert.assertEquals(ImmutableSet.of(ImmutableMap.of("id", "foo"), ImmutableMap.<String, String>of()),
-                 ImmutableSet.of(routes.get(0).getGroupNameValues(), routes.get(1).getGroupNameValues())
+    Assert.assertEquals(new HashSet<>(Arrays.asList("multi-max-match-id", "multi-max-match-*", "multi-max-match-foo")),
+                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination(),
+                                                    routes.get(2).getDestination())));
+
+    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "foo"),
+                                                    Collections.<String, String>emptyMap())),
+                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                                                    routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/foo/bar/wildcard/id1");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(ImmutableSet.of("wildcard-id", "slash-wildcard-id"),
-                 ImmutableSet.of(routes.get(0).getDestination(), routes.get(1).getDestination()));
-    //noinspection Assert.assertEqualsBetweenInconvertibleTypes
-    Assert.assertEquals(ImmutableSet.of(ImmutableMap.of("id", "id1"), ImmutableMap.<String, String>of("id", "id1")),
-                 ImmutableSet.of(routes.get(0).getGroupNameValues(), routes.get(1).getGroupNameValues())
+    Assert.assertEquals(new HashSet<>(Arrays.asList("wildcard-id", "slash-wildcard-id")),
+                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+
+    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+                                                    Collections.singletonMap("id", "id1"))),
+                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                                                    routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/wildcard/id1");
     Assert.assertEquals(1, routes.size());
     Assert.assertEquals("wildcard-id", routes.get(0).getDestination());
-    Assert.assertEquals(ImmutableMap.of("id", "id1"), routes.get(0).getGroupNameValues());
+    Assert.assertEquals(Collections.singletonMap("id", "id1"), routes.get(0).getGroupNameValues());
 
     routes = pathRouter.getDestinations("/foo/bar/wildcard/bar/foo/id1");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(ImmutableSet.of("wildcard-foo-id", "slash-wildcard-foo-id"),
-                 ImmutableSet.of(routes.get(0).getDestination(), routes.get(1).getDestination()));
-    //noinspection Assert.assertEqualsBetweenInconvertibleTypes
-    Assert.assertEquals(ImmutableSet.of(ImmutableMap.of("id", "id1"), ImmutableMap.<String, String>of("id", "id1")),
-                 ImmutableSet.of(routes.get(0).getGroupNameValues(), routes.get(1).getGroupNameValues())
+    Assert.assertEquals(new HashSet<>(Arrays.asList("wildcard-foo-id", "slash-wildcard-foo-id")),
+                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+
+    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+                                                    Collections.singletonMap("id", "id1"))),
+                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                                                    routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/foo/bar/wildcard/bar/foo/id1/baz/bar");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(ImmutableSet.of("wildcard-foo-id-2", "slash-wildcard-foo-id-2"),
-                 ImmutableSet.of(routes.get(0).getDestination(), routes.get(1).getDestination()));
-    //noinspection Assert.assertEqualsBetweenInconvertibleTypes
-    Assert.assertEquals(ImmutableSet.of(ImmutableMap.of("id", "id1"), ImmutableMap.<String, String>of("id", "id1")),
-                 ImmutableSet.of(routes.get(0).getGroupNameValues(), routes.get(1).getGroupNameValues())
+    Assert.assertEquals(new HashSet<>(Arrays.asList("wildcard-foo-id-2", "slash-wildcard-foo-id-2")),
+                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+
+    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+                                                    Collections.singletonMap("id", "id1"))),
+                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                                                    routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/wildcard/bar/foo/id1/baz/bar");
     Assert.assertEquals(1, routes.size());
     Assert.assertEquals("wildcard-foo-id-2", routes.get(0).getDestination());
-    Assert.assertEquals(ImmutableMap.of("id", "id1"), routes.get(0).getGroupNameValues());
+    Assert.assertEquals(Collections.singletonMap("id", "id1"), routes.get(0).getGroupNameValues());
   }
 
   @Test(expected = IllegalArgumentException.class)

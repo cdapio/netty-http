@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,18 +16,16 @@
 
 package co.cask.http;
 
-import com.google.common.base.Charsets;
-import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.io.Closeables;
-import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.EmptyHttpHeaders;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.junit.Assert;
@@ -39,6 +37,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
@@ -171,7 +170,7 @@ public class TestHandler extends AbstractHttpHandler {
   }
 
   private String getStringContent(FullHttpRequest request) throws IOException {
-    return request.content().toString(Charsets.UTF_8);
+    return request.content().toString(StandardCharsets.UTF_8);
   }
 
   @Path("/multi-match/**")
@@ -285,7 +284,9 @@ public class TestHandler extends AbstractHttpHandler {
 
       @Override
       public void chunk(ByteBuf request, HttpResponder responder) {
-        Preconditions.checkState(count == 1, "chunk error");
+        if (count != 1) {
+          throw new IllegalStateException("chunk error");
+        }
         offHeapBuffer.put(request.nioBuffer());
       }
 
@@ -314,7 +315,7 @@ public class TestHandler extends AbstractHttpHandler {
         try {
           channel.write(request.nioBuffer());
         } catch (IOException e) {
-          throw Throwables.propagate(e);
+          throw new RuntimeException(e);
         }
       }
 
@@ -324,14 +325,19 @@ public class TestHandler extends AbstractHttpHandler {
           channel.close();
           responder.sendStatus(HttpResponseStatus.OK);
         } catch (IOException e) {
-          throw Throwables.propagate(e);
+          throw new RuntimeException(e);
         }
       }
 
       @Override
       public void handleError(Throwable cause) {
-        Closeables.closeQuietly(channel);
-        file.delete();
+        try {
+          channel.close();
+        } catch (IOException e) {
+          // Ignore
+        } finally {
+          file.delete();
+        }
       }
     };
   }
@@ -349,7 +355,7 @@ public class TestHandler extends AbstractHttpHandler {
         try {
           channel.write(request.nioBuffer());
         } catch (IOException e) {
-          throw Throwables.propagate(e);
+          throw new RuntimeException(e);
         }
       }
 
@@ -357,16 +363,21 @@ public class TestHandler extends AbstractHttpHandler {
       public void finished(HttpResponder responder) {
         try {
           channel.close();
-          responder.sendFile(file, null);
+          responder.sendFile(file);
         } catch (IOException e) {
-          throw Throwables.propagate(e);
+          throw new RuntimeException(e);
         }
       }
 
       @Override
       public void handleError(Throwable cause) {
-        Closeables.closeQuietly(channel);
-        file.delete();
+        try {
+          channel.close();
+        } catch (IOException e) {
+          // ignore
+        } finally {
+          file.delete();
+        }
       }
     };
   }
@@ -384,7 +395,7 @@ public class TestHandler extends AbstractHttpHandler {
   public void chunk(FullHttpRequest request, HttpResponder responder) throws IOException {
     // Echo the POST body of size 1 byte chunk
     ByteBuf content = request.content().copy();
-    ChunkResponder chunker = responder.sendChunkStart(HttpResponseStatus.OK, null);
+    ChunkResponder chunker = responder.sendChunkStart(HttpResponseStatus.OK);
     while (content.isReadable()) {
       chunker.sendChunk(content.readBytes(1));
     }
@@ -404,7 +415,7 @@ public class TestHandler extends AbstractHttpHandler {
       @Override
       public ByteBuf nextChunk() {
         if (times < repeat) {
-          return Unpooled.wrappedBuffer(Charsets.UTF_8.encode(chunk + " " + times++));
+          return Unpooled.wrappedBuffer(StandardCharsets.UTF_8.encode(chunk + " " + times++));
         }
         return Unpooled.EMPTY_BUFFER;
       }
@@ -423,16 +434,16 @@ public class TestHandler extends AbstractHttpHandler {
             cause.printStackTrace(printer);
           }
         } catch (FileNotFoundException e) {
-          throw Throwables.propagate(e);
+          throw new RuntimeException(e);
         }
       }
-    }, ImmutableMultimap.<String, String>of());
+    }, EmptyHttpHeaders.INSTANCE);
   }
 
   @Path("/uexception")
   @GET
   public void testException(HttpRequest request, HttpResponder responder) {
-    throw Throwables.propagate(new RuntimeException("User Exception"));
+    throw new RuntimeException("User Exception");
   }
 
   @Path("/noresponse")
@@ -457,14 +468,14 @@ public class TestHandler extends AbstractHttpHandler {
   @GET
   public void testSortedSetQueryParam(HttpRequest request, HttpResponder responder,
                                       @QueryParam("id") SortedSet<Integer> ids) {
-    responder.sendString(HttpResponseStatus.OK, Joiner.on(',').join(ids));
+    responder.sendString(HttpResponseStatus.OK, GSON.toJson(ids));
   }
 
   @Path("/listHeaderParam")
   @GET
   public void testListHeaderParam(HttpRequest request, HttpResponder responder,
                                   @HeaderParam("name") List<String> names) {
-    responder.sendString(HttpResponseStatus.OK, Joiner.on(',').join(names));
+    responder.sendJson(HttpResponseStatus.OK, GSON.toJson(names));
   }
 
   @Path("/defaultValue")
@@ -484,13 +495,15 @@ public class TestHandler extends AbstractHttpHandler {
   @Path("/connectionClose")
   @GET
   public void testConnectionClose(HttpRequest request, HttpResponder responder) {
-    responder.sendString(HttpResponseStatus.OK, "Close connection", ImmutableMultimap.of("Connection", "close"));
+    responder.sendString(HttpResponseStatus.OK, "Close connection",
+                         new DefaultHttpHeaders().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE));
   }
 
   @Path("/uploadReject")
   @POST
   public BodyConsumer testUploadReject(HttpRequest request, HttpResponder responder) {
-    responder.sendString(HttpResponseStatus.BAD_REQUEST, "Rejected", ImmutableMultimap.of("Connection", "close"));
+    responder.sendString(HttpResponseStatus.BAD_REQUEST, "Rejected",
+                         new DefaultHttpHeaders().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE));
     return null;
   }
 

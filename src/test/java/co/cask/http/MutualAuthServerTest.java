@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,15 +16,13 @@
 
 package co.cask.http;
 
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Files;
-import com.google.common.io.Resources;
-import com.google.common.util.concurrent.Service;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import java.io.File;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 /**
  * Test the HttpsServer with mutual authentication.
@@ -36,11 +34,14 @@ public class MutualAuthServerTest extends HttpsServerTest {
     NettyHttpService.Builder builder = createBaseNettyHttpServiceBuilder();
 
     File keyStore = tmpFolder.newFile();
-    ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("cert.jks")),
-                     Files.newOutputStreamSupplier(keyStore));
+    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks")) {
+      Files.copy(is, keyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
+
     File trustKeyStore = tmpFolder.newFile();
-    ByteStreams.copy(Resources.newInputStreamSupplier(Resources.getResource("client.jks")),
-                     Files.newOutputStreamSupplier(trustKeyStore));
+    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("client.jks")) {
+      Files.copy(is, trustKeyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
 
     String keyStorePassword = "secret";
     String trustKeyStorePassword = "password";
@@ -50,9 +51,7 @@ public class MutualAuthServerTest extends HttpsServerTest {
 
     setSslClientContext(new SSLClientContext(trustKeyStore, trustKeyStorePassword));
     service = builder.build();
-    service.startAndWait();
-    Service.State state = service.state();
-    Assert.assertEquals(Service.State.RUNNING, state);
+    service.start();
 
     int port = service.getBindAddress().getPort();
     baseURI = URI.create(String.format("https://localhost:%d", port));

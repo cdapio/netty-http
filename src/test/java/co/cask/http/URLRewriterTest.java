@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -16,14 +16,12 @@
 
 package co.cask.http;
 
-import com.google.common.base.Charsets;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.io.ByteStreams;
-import com.google.common.util.concurrent.Service;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -33,10 +31,14 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * Test URLRewriter.
@@ -52,14 +54,12 @@ public class URLRewriterTest {
   public static void setup() throws Exception {
 
     NettyHttpService.Builder builder = NettyHttpService.builder("test-url-rewrite");
-    builder.addHttpHandlers(ImmutableList.of(new TestHandler()));
+    builder.setHttpHandlers(new TestHandler());
     builder.setUrlRewriter(new TestURLRewriter());
     builder.setHost(hostname);
 
     service = builder.build();
-    service.startAndWait();
-    Service.State state = service.state();
-    Assert.assertEquals(Service.State.RUNNING, state);
+    service.start();
     int port = service.getBindAddress().getPort();
 
     baseURI = URI.create(String.format("http://%s:%d", hostname, port));
@@ -67,7 +67,7 @@ public class URLRewriterTest {
 
   @AfterClass
   public static void teardown() throws Exception {
-    service.stopAndWait();
+    service.stop();
   }
 
   @Test
@@ -79,7 +79,7 @@ public class URLRewriterTest {
     Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
     Map<String, String> stringMap = GSON.fromJson(getContent(urlConn),
                                                   new TypeToken<Map<String, String>>() { }.getType());
-    Assert.assertEquals(ImmutableMap.of("status", "Handled put in tweets end-point, id: 7648"), stringMap);
+    Assert.assertEquals(Collections.singletonMap("status", "Handled put in tweets end-point, id: 7648"), stringMap);
 
     urlConn.disconnect();
   }
@@ -117,7 +117,8 @@ public class URLRewriterTest {
 
       if (request.uri().startsWith("/redirect/")) {
         responder.sendStatus(HttpResponseStatus.MOVED_PERMANENTLY,
-                             ImmutableMultimap.of("Location", request.uri().replace("/redirect/", "/rewrite/")));
+                             new DefaultHttpHeaders().set(HttpHeaderNames.LOCATION,
+                                                          request.uri().replace("/redirect/", "/rewrite/")));
         return false;
       }
       return true;
@@ -125,10 +126,10 @@ public class URLRewriterTest {
   }
 
   private static int doGet(String resource) throws Exception {
-    return doGet(resource, ImmutableMap.<String, String>of());
+    return doGet(resource, Collections.<String, String>emptyMap());
   }
 
-  private static int doGet(String resource, Map<String, String> headers) throws Exception {
+  private static int doGet(String resource, @Nullable Map<String, String> headers) throws Exception {
     URL url = baseURI.resolve(resource).toURL();
     HttpURLConnection urlConn = (HttpURLConnection) url.openConnection();
     try {
@@ -156,6 +157,11 @@ public class URLRewriterTest {
   }
 
   private String getContent(HttpURLConnection urlConn) throws IOException {
-    return new String(ByteStreams.toByteArray(urlConn.getInputStream()), Charsets.UTF_8);
+    ByteBuf buffer = Unpooled.buffer();
+    InputStream is = urlConn.getInputStream();
+    while (buffer.writeBytes(is, 1024) > 0) {
+      // no-op
+    }
+    return buffer.toString(StandardCharsets.UTF_8);
   }
 }

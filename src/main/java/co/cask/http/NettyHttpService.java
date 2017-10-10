@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014 Cask Data, Inc.
+ * Copyright © 2014-2017 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -20,12 +20,6 @@ import co.cask.http.internal.BasicHandlerContext;
 import co.cask.http.internal.HttpDispatcher;
 import co.cask.http.internal.HttpResourceHandler;
 import co.cask.http.internal.RequestRouter;
-import com.google.common.base.Function;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
-import com.google.common.util.concurrent.AbstractIdleService;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
@@ -39,10 +33,8 @@ import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import io.netty.util.concurrent.DefaultEventExecutor;
-import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
-import io.netty.util.concurrent.MultithreadEventExecutorGroup;
 import io.netty.util.concurrent.RejectedExecutionHandler;
 import io.netty.util.concurrent.SingleThreadEventExecutor;
 import io.netty.util.internal.SystemPropertyUtil;
@@ -51,13 +43,11 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executor;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 
@@ -66,13 +56,20 @@ import javax.annotation.Nullable;
  * Webservice implemented using the netty framework. Implements Guava's Service interface to manage the states
  * of the webservice.
  */
-public final class NettyHttpService extends AbstractIdleService {
+public final class NettyHttpService {
 
   private static final Logger LOG = LoggerFactory.getLogger(NettyHttpService.class);
 
   // Copied from Netty SingleThreadEventExecutor class since it is not public.
   private static final int DEFAULT_MAX_PENDING_EXECUTOR_TASKS =
     Math.max(16, SystemPropertyUtil.getInt("io.netty.eventexecutor.maxPendingTasks", Integer.MAX_VALUE));
+
+  private enum State {
+    NOT_STARTED,
+    RUNNING,
+    STOPPED,
+    FAILED
+  }
 
   private final String serviceName;
   private final int bossThreadPoolSize;
@@ -84,10 +81,11 @@ public final class NettyHttpService extends AbstractIdleService {
   private final RejectedExecutionHandler rejectedExecutionHandler;
   private final HandlerContext handlerContext;
   private final HttpResourceHandler resourceHandler;
-  private final Function<ChannelPipeline, ChannelPipeline> pipelineModifier;
+  private final ChannelPipelineModifier pipelineModifier;
   private final int httpChunkLimit;
   private final SSLHandlerFactory sslHandlerFactory;
 
+  private State state;
   private ServerBootstrap bootstrap;
   private Channel serverChannel;
   private EventExecutorGroup eventExecutorGroup;
@@ -119,7 +117,7 @@ public final class NettyHttpService extends AbstractIdleService {
                            RejectedExecutionHandler rejectedExecutionHandler, URLRewriter urlRewriter,
                            Iterable<? extends HttpHandler> httpHandlers,
                            Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit,
-                           Function<ChannelPipeline, ChannelPipeline> pipelineModifier,
+                           ChannelPipelineModifier pipelineModifier,
                            SSLHandlerFactory sslHandlerFactory, ExceptionHandler exceptionHandler) {
     this.serviceName = serviceName;
     this.bindAddress = bindAddress;
@@ -135,6 +133,7 @@ public final class NettyHttpService extends AbstractIdleService {
     this.httpChunkLimit = httpChunkLimit;
     this.pipelineModifier = pipelineModifier;
     this.sslHandlerFactory = sslHandlerFactory;
+    this.state = State.NOT_STARTED;
   }
 
   /**
@@ -146,17 +145,58 @@ public final class NettyHttpService extends AbstractIdleService {
     return new Builder(serviceName);
   }
 
-  @Override
-  protected void startUp() throws Exception {
-    LOG.info("Starting HTTP Service {} at address {}", serviceName, bindAddress);
-    resourceHandler.init(handlerContext);
+  /**
+   * Starts the HTTP service.
+   *
+   * @throws Exception if the service failed to started
+   */
+  public synchronized void start() throws Exception {
+    if (state == State.RUNNING) {
+      LOG.debug("Ignore start() call on HTTP service {} since it has already been started.", serviceName);
+      return;
+    }
+    if (state != State.NOT_STARTED) {
+      if (state == State.STOPPED) {
+        throw new IllegalStateException("Cannot start the HTTP service "
+                                          + serviceName + " again since it has been stopped");
+      }
+      throw new IllegalStateException("Cannot start the HTTP service "
+                                        + serviceName + " because it was failed earlier");
+    }
 
-    eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize, execThreadKeepAliveSecs);
-    bootstrap = createBootstrap();
-    serverChannel = bootstrap.bind(bindAddress).sync().channel();
-    bindAddress = (InetSocketAddress) serverChannel.localAddress();
+    try {
+      LOG.info("Starting HTTP Service {} at address {}", serviceName, bindAddress);
+      resourceHandler.init(handlerContext);
 
-    LOG.debug("Started HTTP Service {} at address {}", serviceName, bindAddress);
+      eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize, execThreadKeepAliveSecs);
+      bootstrap = createBootstrap();
+      serverChannel = bootstrap.bind(bindAddress).sync().channel();
+      bindAddress = (InetSocketAddress) serverChannel.localAddress();
+
+      LOG.debug("Started HTTP Service {} at address {}", serviceName, bindAddress);
+      state = State.RUNNING;
+    } catch (Throwable t) {
+      // Release resources if there is any failure
+      try {
+        if (serverChannel != null) {
+          serverChannel.close().sync();
+        }
+      } catch (Throwable t1) {
+        t.addSuppressed(t1);
+      } finally {
+        try {
+          if (bootstrap != null) {
+            shutdownExecutorGroups(bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
+          } else {
+            shutdownExecutorGroups(eventExecutorGroup);
+          }
+        } catch (Throwable t2) {
+          t.addSuppressed(t2);
+        }
+      }
+      state = State.FAILED;
+      throw t;
+    }
   }
 
   /**
@@ -166,18 +206,41 @@ public final class NettyHttpService extends AbstractIdleService {
     return bindAddress;
   }
 
-  @Override
-  protected void shutDown() throws Exception {
+  /**
+   * @return the name of the HTTP service.
+   */
+  public String getServiceName() {
+    return serviceName;
+  }
+
+  /**
+   * Stops the HTTP service gracefully and release all resources.
+   *
+   * @throws Exception if there is exception raised during shutdown.
+   */
+  public synchronized void stop() throws Exception {
+    if (state == State.STOPPED) {
+      LOG.debug("Ignore stop() call on HTTP service {} since it has already been stopped.", serviceName);
+      return;
+    }
+
     LOG.info("Stopping HTTP Service {}", serviceName);
 
     try {
-      serverChannel.close().sync();
-    } finally {
-      bootstrap.config().group().shutdownGracefully();
-      bootstrap.config().childGroup().shutdownGracefully();
-      eventExecutorGroup.shutdownGracefully();
-      resourceHandler.destroy(handlerContext);
+      try {
+        serverChannel.close().sync();
+      } finally {
+        try {
+          shutdownExecutorGroups(bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
+        } finally {
+          resourceHandler.destroy(handlerContext);
+        }
+      }
+    } catch (Throwable t) {
+      state = State.FAILED;
+      throw t;
     }
+    state = State.STOPPED;
     LOG.debug("Stopped HTTP Service {} on address {}", serviceName, bindAddress);
   }
 
@@ -206,14 +269,28 @@ public final class NettyHttpService extends AbstractIdleService {
       }
     };
 
-    Executor executor = new ThreadPoolExecutor(0, size, keepAliveSecs, TimeUnit.SECONDS,
-                                               new SynchronousQueue<Runnable>(), threadFactory);
-    return new MultithreadEventExecutorGroup(size, executor, DEFAULT_MAX_PENDING_EXECUTOR_TASKS,
-                                             rejectedExecutionHandler) {
+    return new DefaultEventExecutorGroup(size, threadFactory,
+                                         DEFAULT_MAX_PENDING_EXECUTOR_TASKS, rejectedExecutionHandler);
+  }
+
+  /**
+   * Returns a {@link ThreadFactory} that creates daemon threads.
+   *
+   * @param nameFormat a format string to be used with {@link String#format(String, Object...)}
+   *                   with one integer argument representing the number of threads created by the factory so far.
+   * @return a {@link ThreadFactory}
+   */
+  private ThreadFactory createDaemonThreadFactory(final String nameFormat) {
+    return new ThreadFactory() {
+
+      private final AtomicInteger count = new AtomicInteger();
+
       @Override
-      protected EventExecutor newChild(Executor executor, Object... args) throws Exception {
-        return new DefaultEventExecutor(this, executor, (Integer) args[0],
-                                        (RejectedExecutionHandler) args[1]);
+      public Thread newThread(Runnable r) {
+        Thread t = new Thread(r);
+        t.setName(String.format(nameFormat, count.getAndIncrement()));
+        t.setDaemon(true);
+        return t;
       }
     };
   }
@@ -223,14 +300,9 @@ public final class NettyHttpService extends AbstractIdleService {
    */
   private ServerBootstrap createBootstrap() throws Exception {
     EventLoopGroup bossGroup = new NioEventLoopGroup(bossThreadPoolSize,
-                                                     new ThreadFactoryBuilder().setDaemon(true)
-                                                       .setNameFormat(serviceName + "-boss-thread-%d")
-                                                       .build());
+                                                     createDaemonThreadFactory(serviceName + "-boss-thread-%d"));
     EventLoopGroup workerGroup = new NioEventLoopGroup(workerThreadPoolSize,
-                                                       new ThreadFactoryBuilder()
-                                                         .setDaemon(true)
-                                                         .setNameFormat(serviceName + "-worker-thread-%d")
-                                                         .build());
+                                                       createDaemonThreadFactory(serviceName + "-worker-thread-%d"));
     ServerBootstrap bootstrap = new ServerBootstrap();
     bootstrap
       .group(bossGroup, workerGroup)
@@ -255,7 +327,7 @@ public final class NettyHttpService extends AbstractIdleService {
           }
 
           if (pipelineModifier != null) {
-            pipelineModifier.apply(pipeline);
+            pipelineModifier.modify(pipeline);
           }
         }
       });
@@ -268,6 +340,30 @@ public final class NettyHttpService extends AbstractIdleService {
     }
 
     return bootstrap;
+  }
+
+  /**
+   * Shutdown the given list of {@link EventExecutorGroup}s gracefully.
+   */
+  private void shutdownExecutorGroups(EventExecutorGroup...groups) throws Exception {
+    Exception ex = null;
+    for (EventExecutorGroup group : groups) {
+      if (group == null) {
+        continue;
+      }
+      try {
+        group.shutdownGracefully().get();
+      } catch (Exception e) {
+        if (ex == null) {
+          ex = e;
+        } else {
+          ex.addSuppressed(e);
+        }
+      }
+    }
+    if (ex != null) {
+      throw ex;
+    }
   }
 
   /**
@@ -295,7 +391,7 @@ public final class NettyHttpService extends AbstractIdleService {
     private final Map<ChannelOption, Object> childChannelConfigs;
 
     private Iterable<? extends HttpHandler> handlers;
-    private Iterable<? extends HandlerHook> handlerHooks = ImmutableList.of();
+    private Iterable<? extends HandlerHook> handlerHooks = Collections.emptyList();
     private URLRewriter urlRewriter = null;
     private int bossThreadPoolSize;
     private int workerThreadPoolSize;
@@ -306,14 +402,8 @@ public final class NettyHttpService extends AbstractIdleService {
     private RejectedExecutionHandler rejectedExecutionHandler;
     private int httpChunkLimit;
     private SSLHandlerFactory sslHandlerFactory;
-    private Function<ChannelPipeline, ChannelPipeline> pipelineModifier;
+    private ChannelPipelineModifier pipelineModifier;
     private ExceptionHandler exceptionHandler;
-
-    // Protected constructor to prevent instantiating Builder instance directly.
-    @Deprecated
-    protected Builder() {
-      this(getCallerClassName());
-    }
 
     // Protected constructor to prevent instantiating Builder instance directly.
     protected Builder(String serviceName) {
@@ -333,29 +423,14 @@ public final class NettyHttpService extends AbstractIdleService {
     }
 
     /**
-     * Returns the simple class name of the first caller that is different than the {@link NettyHttpService} class.
-     * This method is for backward compatibility. Will be removed once the deprecated {@link #Builder()} is removed.
+     * Sets the {@link ChannelPipelineModifier} to use for modifying {@link ChannelPipeline} on new {@link Channel}
+     * registration.
+     *
+     * @param pipelineModifier the modifier to use
+     * @return this builder instance.
      */
-    private static String getCallerClassName() {
-      // Get the stacktrace and determine the caller class. We skip the first one because it's always
-      // Thread.getStackTrace().
-      for (StackTraceElement element : Iterables.skip(Arrays.asList(Thread.currentThread().getStackTrace()), 1)) {
-        if (!element.getClassName().startsWith(NettyHttpService.class.getName())) {
-          String className = element.getClassName();
-          int idx = className.lastIndexOf('.');
-          return idx > 0 ? className.substring(idx + 1) : className;
-        }
-      }
-      return "netty-http";
-    }
-
-    /**
-     * Modify the pipeline upon build by applying the function.
-     * @param function Function that modifies and returns a pipeline.
-     * @return builder
-     */
-    public Builder modifyChannelPipeline(Function<ChannelPipeline, ChannelPipeline> function) {
-      this.pipelineModifier = function;
+    public Builder setChannelPipelineModifier(ChannelPipelineModifier pipelineModifier) {
+      this.pipelineModifier = pipelineModifier;
       return this;
     }
 
@@ -365,9 +440,19 @@ public final class NettyHttpService extends AbstractIdleService {
      * @param handlers Iterable of HttpHandlers.
      * @return instance of {@code Builder}.
      */
-    public Builder addHttpHandlers(Iterable<? extends HttpHandler> handlers) {
+    public Builder setHttpHandlers(Iterable<? extends HttpHandler> handlers) {
       this.handlers = handlers;
       return this;
+    }
+
+    /**
+     * Add HttpHandlers that service the request.
+     *
+     * @param handlers a list of {@link HttpHandler}s to add
+     * @return instance of {@code Builder}.
+     */
+    public Builder setHttpHandlers(HttpHandler... handlers) {
+      return setHttpHandlers(Arrays.asList(handlers));
     }
 
     /**
@@ -528,7 +613,9 @@ public final class NettyHttpService extends AbstractIdleService {
     }
 
     public Builder setExceptionHandler(ExceptionHandler exceptionHandler) {
-      Preconditions.checkNotNull(exceptionHandler, "exceptionHandler cannot be null");
+      if (exceptionHandler == null) {
+        throw new IllegalArgumentException("exceptionHandler cannot be null");
+      }
       this.exceptionHandler = exceptionHandler;
       return this;
     }
