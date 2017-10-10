@@ -65,6 +65,10 @@ public class SSLHandlerFactory {
     }
   }
 
+  public SSLHandlerFactory(SslContext sslContext) {
+    this.sslContext = sslContext;
+  }
+
   private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws Exception {
     try (InputStream is = new FileInputStream(keyStore)) {
       KeyStore ks = KeyStore.getInstance("JKS");

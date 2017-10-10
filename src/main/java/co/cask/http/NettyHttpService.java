@@ -32,6 +32,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
@@ -608,7 +609,14 @@ public final class NettyHttpService {
      * Enable SSL by using the provided SSL information.
      */
     public Builder enableSSL(SSLConfig sslConfig) {
-      this.sslHandlerFactory = new SSLHandlerFactory(sslConfig);
+      return enableSSL(new SSLHandlerFactory(sslConfig));
+    }
+
+    /**
+     * Enable SSL by using the given {@link SSLHandlerFactory} to create {@link SslHandler}.
+     */
+    public Builder enableSSL(SSLHandlerFactory sslHandlerFactory) {
+      this.sslHandlerFactory = sslHandlerFactory;
       return this;
     }
 
