@@ -52,12 +52,12 @@ Example: A simple HTTP service that responds to the ``/v1/ping`` endpoint can be
 
   // Setup HTTP service and add Handlers
   NettyHttpService service = NettyHttpService.builder()
-                             .setPort(7777)
-                             .addHttpHandlers(ImmutableList.of(new PingHandler()))
+                             .setPort(7777)  // Optionally set the port. If unset, it will bind to an ephemeral port
+                             .addHttpHandlers(new PingHandler())
                              .build();
 
   // Start the HTTP service
-  service.startAndWait();
+  service.start();
 
 
 Example: Sample HTTP service that manages an application lifecycle:
@@ -142,11 +142,11 @@ Example: Sample HTTP service that manages an application lifecycle:
   // Setup HTTP service and add Handlers
   NettyHttpService service = NettyHttpService.builder()
                             .setPort(7777)
-                            .addHttpHandlers(ImmutableList.of(new ApplicationHandler()))
+                            .addHttpHandlers(new ApplicationHandler())
                             .build();
 
   // Start the HTTP service
-  service.startAndWait();
+  service.start();
 
 
 Setting up an HTTPS Service
@@ -162,7 +162,7 @@ Code Sample:
   // Setup HTTPS service and add Handlers
   NettyHttpService service = NettyHttpService.builder()
                              .setPort(7777)
-                             .addHttpHandlers(ImmutableList.of(new ApplicationHandler()))
+                             .addHttpHandlers(new ApplicationHandler())
                              .enableSSL(SSLConfig.builder(new File("/path/to/keyStore.jks", "keyStorePassword")
                                         .setCertificatePassword("certificatePassword").build())
                              .build();

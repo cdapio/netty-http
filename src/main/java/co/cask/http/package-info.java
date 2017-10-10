@@ -64,7 +64,7 @@
  *                                            .addHttpHandlers(ImmutableList.of(new Handler())
  *                                            .setPort(8989)
  *                                            .build();
- * service.startAndWait();
+ * service.start();
  *
  * // ....
  *
