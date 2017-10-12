@@ -739,6 +739,33 @@ public class HttpServerTest {
     Assert.assertEquals("Testing message chunk", getContent(urlConn));
   }
 
+  @Test
+  public void testContinueHandler() throws Exception {
+    // Send two request with BodyConsumer handling with keep-alive and expect continue header
+    // The second request should be using the same connection as the first one
+    // This is to test the channel pipeline reconfiguration logic is correct
+    for (int i = 0; i < 2; i++) {
+      File filePath = new File(tmpFolder.newFolder(), "test.txt");
+      HttpURLConnection urlConn = request("/test/v1/stream/file", HttpMethod.POST, true);
+      urlConn.setRequestProperty("Expect", "100-continue");
+      urlConn.setRequestProperty("File-Path", filePath.getAbsolutePath());
+
+      urlConn.getOutputStream().write("content".getBytes(StandardCharsets.UTF_8));
+      Assert.assertEquals(200, urlConn.getResponseCode());
+      String result = getContent(urlConn);
+      Assert.assertEquals("content", result);
+      urlConn.getInputStream().close();
+    }
+
+    // Make two non-streaming requests with keep-alive
+    for (int i = 0; i < 2; i++) {
+      HttpURLConnection urlConn = request("/test/v1/tweets/1", HttpMethod.PUT, true);
+      writeContent(urlConn, "data");
+      Assert.assertEquals(200, urlConn.getResponseCode());
+      urlConn.getInputStream().close();
+    }
+  }
+
   protected Socket createRawSocket(URL url) throws IOException {
     return new Socket(url.getHost(), url.getPort());
   }
