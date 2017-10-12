@@ -143,7 +143,9 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
       if (pipeline.get("aggregator") != null) {
         pipeline.remove("aggregator");
       }
-      pipeline.addAfter("router", "continue", new HttpServerExpectContinueHandler());
+      if (pipeline.get("continue") == null) {
+        pipeline.addAfter("router", "continue", new HttpServerExpectContinueHandler());
+      }
     } else {
       if (pipeline.get("continue") != null) {
         pipeline.remove("continue");
