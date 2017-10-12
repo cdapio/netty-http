@@ -21,6 +21,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.util.AttributeKey;
+import io.netty.util.ReferenceCountUtil;
 
 /**
  * HttpDispatcher that invokes the appropriate http-handler method. The handler and the arguments are read
@@ -34,16 +35,23 @@ public class HttpDispatcher extends ChannelInboundHandlerAdapter {
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
     HttpMethodInfo methodInfo = ctx.channel().attr(METHOD_INFO_KEY).get();
-    if (methodInfo == null) {
-      // This shouldn't happen
-      throw new IllegalStateException("No handler dispatch information available");
-    }
-    if (msg instanceof HttpRequest) {
-      methodInfo.invoke((HttpRequest) msg);
-    } else if (msg instanceof HttpContent) {
-      methodInfo.chunk((HttpContent) msg);
-    } else {
-      super.channelRead(ctx, msg);
+
+    try {
+      if (methodInfo == null) {
+        // This shouldn't happen
+        throw new IllegalStateException("No handler dispatch information available");
+      }
+      if (msg instanceof HttpRequest) {
+        methodInfo.invoke((HttpRequest) msg);
+      } else if (msg instanceof HttpContent) {
+        methodInfo.chunk((HttpContent) msg);
+      } else {
+        // Since the release will be called in finally, we retain the count before delegating to downstream
+        ReferenceCountUtil.retain(msg);
+        ctx.fireChannelRead(msg);
+      }
+    } finally {
+      ReferenceCountUtil.release(msg);
     }
   }
 
