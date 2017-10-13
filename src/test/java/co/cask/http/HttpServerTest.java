@@ -43,6 +43,8 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.util.ReferenceCountUtil;
+import io.netty.util.ResourceLeakDetector;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -82,6 +84,10 @@ import javax.annotation.Nullable;
  * Test the HttpServer.
  */
 public class HttpServerTest {
+
+  static {
+    ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
+  }
 
   @ClassRule
   public static final TemporaryFolder TEMP_FOLDER = new TemporaryFolder();
@@ -385,8 +391,12 @@ public class HttpServerTest {
     HttpUtil.setContentLength(request, 4);
     channel.writeAndFlush(request);
     HttpResponse response = queue.poll(10, TimeUnit.SECONDS);
-    Assert.assertEquals(200, response.status().code());
-    Assert.assertTrue(HttpUtil.isKeepAlive(response));
+    try {
+      Assert.assertEquals(200, response.status().code());
+      Assert.assertTrue(HttpUtil.isKeepAlive(response));
+    } finally {
+      ReferenceCountUtil.release(response);
+    }
 
     // Make one more request, the connection should remain open.
     // This request is make with connection: closed
@@ -396,8 +406,12 @@ public class HttpServerTest {
     HttpUtil.setKeepAlive(request, false);
     channel.writeAndFlush(request);
     response = queue.poll(10, TimeUnit.SECONDS);
-    Assert.assertEquals(200, response.status().code());
-    Assert.assertFalse(HttpUtil.isKeepAlive(response));
+    try {
+      Assert.assertEquals(200, response.status().code());
+      Assert.assertFalse(HttpUtil.isKeepAlive(response));
+    } finally {
+      ReferenceCountUtil.release(response);
+    }
 
     // The channel should be closed.
     channel.closeFuture().await(10, TimeUnit.SECONDS);

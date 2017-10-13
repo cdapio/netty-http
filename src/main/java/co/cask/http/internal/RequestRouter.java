@@ -28,6 +28,7 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,32 +65,39 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
    */
   @Override
   public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-    if (exceptionRaised.get()) {
-      return;
-    }
-    if (!(msg instanceof HttpRequest)) {
-      // If there is no methodInfo, it means the request was already rejected.
-      // What we received here is just residue of the request, which can be ignored.
-      if (methodInfo != null) {
-        super.channelRead(ctx, msg);
+    try {
+      if (exceptionRaised.get()) {
+        return;
       }
-      return;
-    }
-    HttpRequest request = (HttpRequest) msg;
-    BasicHttpResponder responder = new BasicHttpResponder(ctx.channel(), sslEnabled);
-    methodInfo = prepareHandleMethod(request, responder, ctx);
 
-    if (methodInfo != null) {
-      ctx.fireChannelRead(msg);
-    } else {
-      if (!responder.isResponded()) {
-        // If not yet responded, just respond with a not found and close the connection
-        HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
-        ctx.channel().writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
-      } else {
-        // If already responded, just close the connection
-        ctx.channel().close();
+      if (!(msg instanceof HttpRequest)) {
+        // If there is no methodInfo, it means the request was already rejected.
+        // What we received here is just residue of the request, which can be ignored.
+        if (methodInfo != null) {
+          ReferenceCountUtil.retain(msg);
+          ctx.fireChannelRead(msg);
+        }
+        return;
       }
+      HttpRequest request = (HttpRequest) msg;
+      BasicHttpResponder responder = new BasicHttpResponder(ctx.channel(), sslEnabled);
+      methodInfo = prepareHandleMethod(request, responder, ctx);
+
+      if (methodInfo != null) {
+        ReferenceCountUtil.retain(msg);
+        ctx.fireChannelRead(msg);
+      } else {
+        if (!responder.isResponded()) {
+          // If not yet responded, just respond with a not found and close the connection
+          HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
+          ctx.channel().writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        } else {
+          // If already responded, just close the connection
+          ctx.channel().close();
+        }
+      }
+    } finally {
+      ReferenceCountUtil.release(msg);
     }
   }
 
