@@ -75,7 +75,9 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.DeflaterInputStream;
 import java.util.zip.GZIPInputStream;
 import javax.annotation.Nullable;
@@ -140,17 +142,24 @@ public class HttpServerTest {
 
     // After service shutdown, there shouldn't be any netty threads (NETTY-10)
     boolean passed = true;
-    for (Thread t : Thread.getAllStackTraces().keySet()) {
-      String name = t.getName();
-      boolean isNettyThread = name.startsWith(serviceName + "-executor-")
-        || name.startsWith(serviceName + "-worker-thread-")
-        || name.startsWith(serviceName + "-boss-thread-");
-      if (isNettyThread) {
-        passed = false;
-        LOG.warn("Netty thread still alive: {}", t.getName());
-        break;
+    int count = 0;
+    do {
+      if (!passed) {
+        TimeUnit.MILLISECONDS.sleep(100);
       }
-    }
+      passed = true;
+      for (Thread t : Thread.getAllStackTraces().keySet()) {
+        String name = t.getName();
+        boolean isNettyThread = name.startsWith(serviceName + "-executor-")
+          || name.startsWith(serviceName + "-worker-thread-")
+          || name.startsWith(serviceName + "-boss-thread-");
+        if (isNettyThread) {
+          passed = false;
+          LOG.warn("Netty thread still alive in iteration {}: {}", count, t.getName());
+          break;
+        }
+      }
+    } while (!passed && ++count < 10);
 
     Assert.assertTrue("Some netty threads are still alive. Please see logs above", passed);
   }
@@ -360,11 +369,22 @@ public class HttpServerTest {
   public void testKeepAlive() throws Exception {
     final URL url = baseURI.resolve("/test/v1/tweets/1").toURL();
 
+    ThreadFactory threadFactory = new ThreadFactory() {
+      private final AtomicInteger id = new AtomicInteger(0);
+
+      @Override
+      public Thread newThread(Runnable r) {
+        Thread t = new Thread(r);
+        t.setName("client-thread-" + id.getAndIncrement());
+        return t;
+      }
+    };
+
     final BlockingQueue<HttpResponse> queue = new ArrayBlockingQueue<>(1);
     Bootstrap bootstrap = new Bootstrap()
       .channel(NioSocketChannel.class)
       .remoteAddress(url.getHost(), url.getPort())
-      .group(new NioEventLoopGroup())
+      .group(new NioEventLoopGroup(10, threadFactory))
       .handler(new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
@@ -415,6 +435,7 @@ public class HttpServerTest {
 
     // The channel should be closed.
     channel.closeFuture().await(10, TimeUnit.SECONDS);
+    bootstrap.config().group().shutdownGracefully().await();
   }
 
   @Test

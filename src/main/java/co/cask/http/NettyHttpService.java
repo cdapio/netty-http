@@ -34,10 +34,9 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import io.netty.util.concurrent.DefaultEventExecutorGroup;
 import io.netty.util.concurrent.EventExecutorGroup;
-import io.netty.util.concurrent.RejectedExecutionHandler;
-import io.netty.util.concurrent.SingleThreadEventExecutor;
+import io.netty.util.concurrent.NonStickyEventExecutorGroup;
+import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
 import io.netty.util.internal.SystemPropertyUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +46,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
@@ -76,7 +77,6 @@ public final class NettyHttpService {
   private final int bossThreadPoolSize;
   private final int workerThreadPoolSize;
   private final int execThreadPoolSize;
-  private final long execThreadKeepAliveSecs;
   private final Map<ChannelOption, Object> channelConfigs;
   private final Map<ChannelOption, Object> childChannelConfigs;
   private final RejectedExecutionHandler rejectedExecutionHandler;
@@ -100,7 +100,6 @@ public final class NettyHttpService {
    * @param bossThreadPoolSize Size of the boss thread pool.
    * @param workerThreadPoolSize Size of the worker thread pool.
    * @param execThreadPoolSize Size of the thread pool for the executor.
-   * @param execThreadKeepAliveSecs  maximum time that excess idle threads will wait for new tasks before terminating.
    * @param channelConfigs Configurations for the server socket channel.
    * @param rejectedExecutionHandler rejection policy for executor.
    * @param urlRewriter URLRewriter to rewrite incoming URLs.
@@ -112,8 +111,7 @@ public final class NettyHttpService {
    */
   private NettyHttpService(String serviceName,
                            InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
-                           int execThreadPoolSize, long execThreadKeepAliveSecs,
-                           Map<ChannelOption, Object> channelConfigs,
+                           int execThreadPoolSize, Map<ChannelOption, Object> channelConfigs,
                            Map<ChannelOption, Object> childChannelConfigs,
                            RejectedExecutionHandler rejectedExecutionHandler, URLRewriter urlRewriter,
                            Iterable<? extends HttpHandler> httpHandlers,
@@ -125,7 +123,6 @@ public final class NettyHttpService {
     this.bossThreadPoolSize = bossThreadPoolSize;
     this.workerThreadPoolSize = workerThreadPoolSize;
     this.execThreadPoolSize = execThreadPoolSize;
-    this.execThreadKeepAliveSecs = execThreadKeepAliveSecs;
     this.channelConfigs = new HashMap<>(channelConfigs);
     this.childChannelConfigs = new HashMap<>(childChannelConfigs);
     this.rejectedExecutionHandler = rejectedExecutionHandler;
@@ -169,7 +166,7 @@ public final class NettyHttpService {
       LOG.info("Starting HTTP Service {} at address {}", serviceName, bindAddress);
       resourceHandler.init(handlerContext);
 
-      eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize, execThreadKeepAliveSecs);
+      eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize);
       bootstrap = createBootstrap();
       serverChannel = bootstrap.bind(bindAddress).sync().channel();
       bindAddress = (InetSocketAddress) serverChannel.localAddress();
@@ -249,11 +246,10 @@ public final class NettyHttpService {
    * Create {@link EventExecutorGroup} for executing handle methods.
    *
    * @param size size of threadPool
-   * @param keepAliveSecs  maximum time that excess idle threads will wait for new tasks before terminating
    * @return instance of {@link EventExecutorGroup} or {@code null} if {@code size} is {@code <= 0}.
    */
   @Nullable
-  private EventExecutorGroup createEventExecutorGroup(int size, long keepAliveSecs) {
+  private EventExecutorGroup createEventExecutorGroup(int size) {
     if (size <= 0) {
       return null;
     }
@@ -270,8 +266,8 @@ public final class NettyHttpService {
       }
     };
 
-    return new DefaultEventExecutorGroup(size, threadFactory,
-                                         DEFAULT_MAX_PENDING_EXECUTOR_TASKS, rejectedExecutionHandler);
+    return new NonStickyEventExecutorGroup(new UnorderedThreadPoolEventExecutor(size, threadFactory,
+                                                                                rejectedExecutionHandler));
   }
 
   /**
@@ -353,7 +349,7 @@ public final class NettyHttpService {
         continue;
       }
       try {
-        group.shutdownGracefully().get();
+        group.shutdownGracefully().sync();
       } catch (Exception e) {
         if (ex == null) {
           ex = e;
@@ -379,12 +375,8 @@ public final class NettyHttpService {
     private static final long DEFAULT_EXEC_HANDLER_THREAD_KEEP_ALIVE_TIME_SECS = 60L;
     // Caller runs by default
     private static final RejectedExecutionHandler DEFAULT_REJECTED_EXECUTION_HANDLER =
-      new RejectedExecutionHandler() {
-        @Override
-        public void rejected(Runnable task, SingleThreadEventExecutor executor) {
-          task.run();
-        }
-      };
+      new ThreadPoolExecutor.CallerRunsPolicy();
+
     private static final int DEFAULT_HTTP_CHUNK_LIMIT = 150 * 1024 * 1024;
 
     private final String serviceName;
@@ -399,7 +391,6 @@ public final class NettyHttpService {
     private int execThreadPoolSize;
     private String host;
     private int port;
-    private long execThreadKeepAliveSecs;
     private RejectedExecutionHandler rejectedExecutionHandler;
     private int httpChunkLimit;
     private SSLHandlerFactory sslHandlerFactory;
@@ -412,7 +403,6 @@ public final class NettyHttpService {
       bossThreadPoolSize = DEFAULT_BOSS_THREAD_POOL_SIZE;
       workerThreadPoolSize = DEFAULT_WORKER_THREAD_POOL_SIZE;
       execThreadPoolSize = DEFAULT_EXEC_HANDLER_THREAD_POOL_SIZE;
-      execThreadKeepAliveSecs = DEFAULT_EXEC_HANDLER_THREAD_KEEP_ALIVE_TIME_SECS;
       rejectedExecutionHandler = DEFAULT_REJECTED_EXECUTION_HANDLER;
       httpChunkLimit = DEFAULT_HTTP_CHUNK_LIMIT;
       port = 0;
@@ -555,18 +545,6 @@ public final class NettyHttpService {
     }
 
     /**
-     * Set threadKeepAliveSeconds -   maximum time that excess idle threads will wait for new tasks before terminating.
-     * Default value is 60 seconds.
-     *
-     * @param threadKeepAliveSecs  thread keep alive seconds.
-     * @return an instance of {@code Builder}.
-     */
-    public Builder setExecThreadKeepAliveSeconds(long threadKeepAliveSecs) {
-      this.execThreadKeepAliveSecs = threadKeepAliveSecs;
-      return this;
-    }
-
-    /**
      * Set RejectedExecutionHandler - rejection policy for executor.
      *
      * @param rejectedExecutionHandler rejectionExecutionHandler.
@@ -640,7 +618,7 @@ public final class NettyHttpService {
       }
 
       return new NettyHttpService(serviceName, bindAddress, bossThreadPoolSize, workerThreadPoolSize,
-                                  execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, childChannelConfigs,
+                                  execThreadPoolSize, channelConfigs, childChannelConfigs,
                                   rejectedExecutionHandler, urlRewriter, handlers, handlerHooks, httpChunkLimit,
                                   pipelineModifier, sslHandlerFactory, exceptionHandler);
     }
