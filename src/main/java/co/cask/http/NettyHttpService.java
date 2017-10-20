@@ -26,6 +26,8 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -35,6 +37,8 @@ import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.EventExecutorGroup;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.NonStickyEventExecutorGroup;
 import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
 import io.netty.util.internal.SystemPropertyUtil;
@@ -42,9 +46,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
@@ -88,7 +94,7 @@ public final class NettyHttpService {
 
   private State state;
   private ServerBootstrap bootstrap;
-  private Channel serverChannel;
+  private ChannelGroup channelGroup;
   private EventExecutorGroup eventExecutorGroup;
   private InetSocketAddress bindAddress;
 
@@ -167,30 +173,26 @@ public final class NettyHttpService {
       resourceHandler.init(handlerContext);
 
       eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize);
-      bootstrap = createBootstrap();
-      serverChannel = bootstrap.bind(bindAddress).sync().channel();
+      channelGroup = new DefaultChannelGroup(ImmediateEventExecutor.INSTANCE);
+      bootstrap = createBootstrap(channelGroup);
+      Channel serverChannel = bootstrap.bind(bindAddress).sync().channel();
+      channelGroup.add(serverChannel);
+
       bindAddress = (InetSocketAddress) serverChannel.localAddress();
 
       LOG.debug("Started HTTP Service {} at address {}", serviceName, bindAddress);
       state = State.RUNNING;
     } catch (Throwable t) {
       // Release resources if there is any failure
+      channelGroup.close().awaitUninterruptibly();
       try {
-        if (serverChannel != null) {
-          serverChannel.close().sync();
+        if (bootstrap != null) {
+          shutdownExecutorGroups(bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
+        } else {
+          shutdownExecutorGroups(eventExecutorGroup);
         }
-      } catch (Throwable t1) {
-        t.addSuppressed(t1);
-      } finally {
-        try {
-          if (bootstrap != null) {
-            shutdownExecutorGroups(bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
-          } else {
-            shutdownExecutorGroups(eventExecutorGroup);
-          }
-        } catch (Throwable t2) {
-          t.addSuppressed(t2);
-        }
+      } catch (Throwable t2) {
+        t.addSuppressed(t2);
       }
       state = State.FAILED;
       throw t;
@@ -226,7 +228,7 @@ public final class NettyHttpService {
 
     try {
       try {
-        serverChannel.close().sync();
+        channelGroup.close().sync();
       } finally {
         try {
           shutdownExecutorGroups(bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
@@ -295,7 +297,7 @@ public final class NettyHttpService {
   /**
    * Creates the server bootstrap.
    */
-  private ServerBootstrap createBootstrap() throws Exception {
+  private ServerBootstrap createBootstrap(final ChannelGroup channelGroup) throws Exception {
     EventLoopGroup bossGroup = new NioEventLoopGroup(bossThreadPoolSize,
                                                      createDaemonThreadFactory(serviceName + "-boss-thread-%d"));
     EventLoopGroup workerGroup = new NioEventLoopGroup(workerThreadPoolSize,
@@ -307,6 +309,8 @@ public final class NettyHttpService {
       .childHandler(new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
+          channelGroup.add(ch);
+
           ChannelPipeline pipeline = ch.pipeline();
           if (sslHandlerFactory != null) {
             // Add SSLHandler if SSL is enabled
@@ -344,12 +348,17 @@ public final class NettyHttpService {
    */
   private void shutdownExecutorGroups(EventExecutorGroup...groups) throws Exception {
     Exception ex = null;
+    List<Future<?>> futures = new ArrayList<>();
     for (EventExecutorGroup group : groups) {
       if (group == null) {
         continue;
       }
+      futures.add(group.shutdownGracefully());
+    }
+
+    for (Future<?> future : futures) {
       try {
-        group.shutdownGracefully().sync();
+        future.syncUninterruptibly();
       } catch (Exception e) {
         if (ex == null) {
           ex = e;
@@ -358,6 +367,7 @@ public final class NettyHttpService {
         }
       }
     }
+
     if (ex != null) {
       throw ex;
     }
