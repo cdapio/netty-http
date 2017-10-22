@@ -583,6 +583,12 @@ public class TestHandler extends AbstractHttpHandler {
     }
   }
 
+  @Path("/echoHeaders")
+  @GET
+  public void testEchoHeaders(HttpRequest request, HttpResponder responder) {
+    responder.sendStatus(HttpResponseStatus.OK, request.headers());
+  }
+
   @Override
   public void init(HandlerContext context) {}
 

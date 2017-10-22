@@ -79,7 +79,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
     }
 
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
-    addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
+    addContentTypeIfMissing(response.headers().add(headers), OCTET_STREAM_TYPE);
 
     if (HttpUtil.getContentLength(response, -1L) < 0) {
       HttpUtil.setTransferEncodingChunked(response, true);
@@ -93,11 +93,11 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   @Override
   public void sendContent(HttpResponseStatus status, ByteBuf content, HttpHeaders headers) {
     FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status, content);
-    response.headers().setAll(headers);
+    response.headers().add(headers);
     HttpUtil.setContentLength(response, content.readableBytes());
 
     if (content.isReadable()) {
-      addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
+      addContentTypeIfMissing(response.headers(), OCTET_STREAM_TYPE);
     }
 
     checkNotResponded();
@@ -107,7 +107,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   @Override
   public void sendFile(File file, HttpHeaders headers) throws IOException {
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-    addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
+    addContentTypeIfMissing(response.headers().add(headers), OCTET_STREAM_TYPE);
 
     HttpUtil.setTransferEncodingChunked(response, false);
     HttpUtil.setContentLength(response, file.length());
@@ -160,7 +160,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
     }
 
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-    addContentTypeIfMissing(response.headers().setAll(headers), OCTET_STREAM_TYPE);
+    addContentTypeIfMissing(response.headers().add(headers), OCTET_STREAM_TYPE);
 
     if (contentLength < 0L) {
       HttpUtil.setTransferEncodingChunked(response, true);
