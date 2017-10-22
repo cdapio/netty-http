@@ -328,6 +328,16 @@ public class HttpServerTest {
     writeContent(urlConn, "data");
     Assert.assertEquals(404, urlConn.getResponseCode());
     urlConn.disconnect();
+
+    // Hit a valid endpoint
+    urlConn = request("/test/v1/tweets/1", HttpMethod.GET, true);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    urlConn.getInputStream().close();
+    urlConn.disconnect();
+
+    // Reuse the connection to hit an invalid endpoint
+    urlConn = request("/test/v1/users", HttpMethod.GET);
+    Assert.assertEquals(404, urlConn.getResponseCode());
   }
 
   @Test

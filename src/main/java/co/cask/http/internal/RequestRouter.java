@@ -81,6 +81,9 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
       }
       HttpRequest request = (HttpRequest) msg;
       BasicHttpResponder responder = new BasicHttpResponder(ctx.channel(), sslEnabled);
+
+      // Reset the methodInfo for the incoming request error handling
+      methodInfo = null;
       methodInfo = prepareHandleMethod(request, responder, ctx);
 
       if (methodInfo != null) {
@@ -106,7 +109,6 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
     String exceptionMessage = "Exception caught in channel processing.";
     if (exceptionRaised.compareAndSet(false, true)) {
       if (methodInfo != null) {
-        LOG.error(exceptionMessage, cause);
         methodInfo.sendError(HttpResponseStatus.INTERNAL_SERVER_ERROR, cause);
         methodInfo = null;
       } else {
