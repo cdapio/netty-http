@@ -54,7 +54,7 @@ public abstract class AbstractHttpResponder implements HttpResponder {
       return;
     }
     ByteBuf buffer = Unpooled.wrappedBuffer(StandardCharsets.UTF_8.encode(data));
-    sendContent(status, buffer, addContentTypeIfMissing(new DefaultHttpHeaders().setAll(headers),
+    sendContent(status, buffer, addContentTypeIfMissing(new DefaultHttpHeaders().add(headers),
                                                         "text/plain; charset=utf-8"));
   }
 

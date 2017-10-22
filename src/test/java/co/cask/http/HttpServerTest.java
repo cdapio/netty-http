@@ -69,6 +69,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
@@ -809,6 +810,21 @@ public class HttpServerTest {
       Assert.assertEquals(200, urlConn.getResponseCode());
       urlConn.getInputStream().close();
     }
+  }
+
+  @Test
+  public void testHeaders() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/echoHeaders", HttpMethod.GET);
+    urlConn.addRequestProperty("k1", "v1");
+    urlConn.addRequestProperty("k1", "v2");
+    urlConn.addRequestProperty("k1", "v3");
+    urlConn.addRequestProperty("k2", "v1");
+
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Map<String, List<String>> headers = urlConn.getHeaderFields();
+
+    Assert.assertEquals(new HashSet<>(Arrays.asList("v1", "v2", "v3")), new HashSet<>(headers.get("k1")));
+    Assert.assertEquals(Collections.singletonList("v1"), headers.get("k2"));
   }
 
   protected Socket createRawSocket(URL url) throws IOException {
