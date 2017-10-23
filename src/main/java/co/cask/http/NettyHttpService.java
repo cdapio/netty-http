@@ -170,10 +170,9 @@ public final class NettyHttpService {
 
     try {
       LOG.info("Starting HTTP Service {} at address {}", serviceName, bindAddress);
-      resourceHandler.init(handlerContext);
-
-      eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize);
       channelGroup = new DefaultChannelGroup(ImmediateEventExecutor.INSTANCE);
+      resourceHandler.init(handlerContext);
+      eventExecutorGroup = createEventExecutorGroup(execThreadPoolSize);
       bootstrap = createBootstrap(channelGroup);
       Channel serverChannel = bootstrap.bind(bindAddress).sync().channel();
       channelGroup.add(serverChannel);
