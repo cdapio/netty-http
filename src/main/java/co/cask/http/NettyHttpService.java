@@ -41,7 +41,6 @@ import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 import io.netty.util.concurrent.NonStickyEventExecutorGroup;
 import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
-import io.netty.util.internal.SystemPropertyUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,6 +54,7 @@ import java.util.Map;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
@@ -67,10 +67,6 @@ import javax.annotation.Nullable;
 public final class NettyHttpService {
 
   private static final Logger LOG = LoggerFactory.getLogger(NettyHttpService.class);
-
-  // Copied from Netty SingleThreadEventExecutor class since it is not public.
-  private static final int DEFAULT_MAX_PENDING_EXECUTOR_TASKS =
-    Math.max(16, SystemPropertyUtil.getInt("io.netty.eventexecutor.maxPendingTasks", Integer.MAX_VALUE));
 
   private enum State {
     NOT_STARTED,
@@ -186,9 +182,10 @@ public final class NettyHttpService {
       channelGroup.close().awaitUninterruptibly();
       try {
         if (bootstrap != null) {
-          shutdownExecutorGroups(bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
+          shutdownExecutorGroups(0, 5, TimeUnit.SECONDS,
+                                 bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
         } else {
-          shutdownExecutorGroups(eventExecutorGroup);
+          shutdownExecutorGroups(0, 5, TimeUnit.SECONDS, eventExecutorGroup);
         }
       } catch (Throwable t2) {
         t.addSuppressed(t2);
@@ -213,11 +210,26 @@ public final class NettyHttpService {
   }
 
   /**
-   * Stops the HTTP service gracefully and release all resources.
+   * Stops the HTTP service gracefully and release all resources. Same as calling {@link #stop(long, long, TimeUnit)}
+   * with {@code 0} second quiet period and {@code 5} seconds timeout.
    *
    * @throws Exception if there is exception raised during shutdown.
    */
-  public synchronized void stop() throws Exception {
+  public void stop() throws Exception {
+    stop(0, 5, TimeUnit.SECONDS);
+  }
+
+  /**
+   * Stops the HTTP service gracefully and release all resources.
+   *
+   * @param quietPeriod the quiet period as described in the documentation of {@link EventExecutorGroup}
+   * @param timeout     the maximum amount of time to wait until the executor is
+   *                    {@linkplain EventExecutorGroup#shutdown()}
+   *                    regardless if a task was submitted during the quiet period
+   * @param unit        the unit of {@code quietPeriod} and {@code timeout}
+   * @throws Exception if there is exception raised during shutdown.
+   */
+  public synchronized void stop(long quietPeriod, long timeout, TimeUnit unit) throws Exception {
     if (state == State.STOPPED) {
       LOG.debug("Ignore stop() call on HTTP service {} since it has already been stopped.", serviceName);
       return;
@@ -227,10 +239,11 @@ public final class NettyHttpService {
 
     try {
       try {
-        channelGroup.close().sync();
+        channelGroup.close().awaitUninterruptibly();
       } finally {
         try {
-          shutdownExecutorGroups(bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
+          shutdownExecutorGroups(quietPeriod, timeout, unit,
+                                 bootstrap.config().group(), bootstrap.config().childGroup(), eventExecutorGroup);
         } finally {
           resourceHandler.destroy(handlerContext);
         }
@@ -345,14 +358,14 @@ public final class NettyHttpService {
   /**
    * Shutdown the given list of {@link EventExecutorGroup}s gracefully.
    */
-  private void shutdownExecutorGroups(EventExecutorGroup...groups) throws Exception {
+  private void shutdownExecutorGroups(long quietPeriod, long timeout, TimeUnit unit, EventExecutorGroup...groups) {
     Exception ex = null;
     List<Future<?>> futures = new ArrayList<>();
     for (EventExecutorGroup group : groups) {
       if (group == null) {
         continue;
       }
-      futures.add(group.shutdownGracefully());
+      futures.add(group.shutdownGracefully(quietPeriod, timeout, unit));
     }
 
     for (Future<?> future : futures) {
@@ -368,7 +381,9 @@ public final class NettyHttpService {
     }
 
     if (ex != null) {
-      throw ex;
+      // Just log, don't rethrow since it shouldn't happen normally and
+      // there is nothing much can be done from the caller side
+      LOG.warn("Exception raised when shutting down executor", ex);
     }
   }
 
