@@ -79,6 +79,7 @@ public final class NettyHttpService {
   private final int bossThreadPoolSize;
   private final int workerThreadPoolSize;
   private final int execThreadPoolSize;
+  private final long execThreadKeepAliveSecs;
   private final Map<ChannelOption, Object> channelConfigs;
   private final Map<ChannelOption, Object> childChannelConfigs;
   private final RejectedExecutionHandler rejectedExecutionHandler;
@@ -102,6 +103,7 @@ public final class NettyHttpService {
    * @param bossThreadPoolSize Size of the boss thread pool.
    * @param workerThreadPoolSize Size of the worker thread pool.
    * @param execThreadPoolSize Size of the thread pool for the executor.
+   * @param execThreadKeepAliveSecs maximum time that excess idle threads will wait for new tasks before terminating.
    * @param channelConfigs Configurations for the server socket channel.
    * @param rejectedExecutionHandler rejection policy for executor.
    * @param urlRewriter URLRewriter to rewrite incoming URLs.
@@ -113,7 +115,8 @@ public final class NettyHttpService {
    */
   private NettyHttpService(String serviceName,
                            InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
-                           int execThreadPoolSize, Map<ChannelOption, Object> channelConfigs,
+                           int execThreadPoolSize, long execThreadKeepAliveSecs,
+                           Map<ChannelOption, Object> channelConfigs,
                            Map<ChannelOption, Object> childChannelConfigs,
                            RejectedExecutionHandler rejectedExecutionHandler, URLRewriter urlRewriter,
                            Iterable<? extends HttpHandler> httpHandlers,
@@ -125,6 +128,7 @@ public final class NettyHttpService {
     this.bossThreadPoolSize = bossThreadPoolSize;
     this.workerThreadPoolSize = workerThreadPoolSize;
     this.execThreadPoolSize = execThreadPoolSize;
+    this.execThreadKeepAliveSecs = execThreadKeepAliveSecs;
     this.channelConfigs = new HashMap<>(channelConfigs);
     this.childChannelConfigs = new HashMap<>(childChannelConfigs);
     this.rejectedExecutionHandler = rejectedExecutionHandler;
@@ -280,8 +284,13 @@ public final class NettyHttpService {
       }
     };
 
-    return new NonStickyEventExecutorGroup(new UnorderedThreadPoolEventExecutor(size, threadFactory,
-                                                                                rejectedExecutionHandler));
+    UnorderedThreadPoolEventExecutor executor = new UnorderedThreadPoolEventExecutor(size, threadFactory,
+                                                                                     rejectedExecutionHandler);
+    if (execThreadKeepAliveSecs > 0) {
+      executor.setKeepAliveTime(execThreadKeepAliveSecs, TimeUnit.SECONDS);
+      executor.allowCoreThreadTimeOut(true);
+    }
+    return new NonStickyEventExecutorGroup(executor);
   }
 
   /**
@@ -413,6 +422,7 @@ public final class NettyHttpService {
     private int bossThreadPoolSize;
     private int workerThreadPoolSize;
     private int execThreadPoolSize;
+    private long execThreadKeepAliveSecs;
     private String host;
     private int port;
     private RejectedExecutionHandler rejectedExecutionHandler;
@@ -427,6 +437,7 @@ public final class NettyHttpService {
       bossThreadPoolSize = DEFAULT_BOSS_THREAD_POOL_SIZE;
       workerThreadPoolSize = DEFAULT_WORKER_THREAD_POOL_SIZE;
       execThreadPoolSize = DEFAULT_EXEC_HANDLER_THREAD_POOL_SIZE;
+      execThreadKeepAliveSecs = DEFAULT_EXEC_HANDLER_THREAD_KEEP_ALIVE_TIME_SECS;
       rejectedExecutionHandler = DEFAULT_REJECTED_EXECUTION_HANDLER;
       httpChunkLimit = DEFAULT_HTTP_CHUNK_LIMIT;
       port = 0;
@@ -557,7 +568,7 @@ public final class NettyHttpService {
 
     /**
      * Set size of executorThreadPool in netty default value is 60 if it is not set.
-     * If the size is {@code 0}, then no executor will be used, hence calls to {@link HttpHandler} would be made from
+     * If the size is {@code <= 0}, then no executor will be used, hence calls to {@link HttpHandler} would be made from
      * worker threads directly.
      *
      * @param execThreadPoolSize size of workerThreadPool.
@@ -565,6 +576,18 @@ public final class NettyHttpService {
      */
     public Builder setExecThreadPoolSize(int execThreadPoolSize) {
       this.execThreadPoolSize = execThreadPoolSize;
+      return this;
+    }
+
+    /**
+     * Set the maximum time that excess idle threads will wait for new tasks before terminating.
+     * Default value is 60 seconds. If the value is {@code <= 0}, then idle threads will not be terminated.
+     *
+     * @param threadKeepAliveSecs thread keep alive seconds.
+     * @return an instance of {@code Builder}.
+     */
+    public Builder setExecThreadKeepAliveSeconds(long threadKeepAliveSecs) {
+      this.execThreadKeepAliveSecs = threadKeepAliveSecs;
       return this;
     }
 
@@ -642,7 +665,7 @@ public final class NettyHttpService {
       }
 
       return new NettyHttpService(serviceName, bindAddress, bossThreadPoolSize, workerThreadPoolSize,
-                                  execThreadPoolSize, channelConfigs, childChannelConfigs,
+                                  execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, childChannelConfigs,
                                   rejectedExecutionHandler, urlRewriter, handlers, handlerHooks, httpChunkLimit,
                                   pipelineModifier, sslHandlerFactory, exceptionHandler);
     }
