@@ -18,8 +18,10 @@ package co.cask.http.internal;
 
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 
 import java.nio.charset.StandardCharsets;
@@ -45,7 +47,9 @@ final class HandlerException extends Exception {
   }
 
   HttpResponse createFailureResponse() {
-    return new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, failureStatus,
-                                       Unpooled.copiedBuffer(message, StandardCharsets.UTF_8));
+    FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, failureStatus,
+                                                            Unpooled.copiedBuffer(message, StandardCharsets.UTF_8));
+    HttpUtil.setContentLength(response, response.content().readableBytes());
+    return response;
   }
 }

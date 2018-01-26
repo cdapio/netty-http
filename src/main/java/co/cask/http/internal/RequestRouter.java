@@ -21,12 +21,14 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerExpectContinueHandler;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
@@ -92,7 +94,9 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
       } else {
         if (!responder.isResponded()) {
           // If not yet responded, just respond with a not found and close the connection
-          HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
+          HttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
+          HttpUtil.setContentLength(response, 0);
+          HttpUtil.setKeepAlive(response, false);
           ctx.channel().writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
         } else {
           // If already responded, just close the connection
@@ -114,6 +118,7 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
       } else {
         if (cause instanceof HandlerException) {
           HttpResponse response = ((HandlerException) cause).createFailureResponse();
+          HttpUtil.setKeepAlive(response, false);
           // trace logs for user errors, error logs for internal server errors
           if (isUserError(response)) {
             LOG.trace(exceptionMessage, cause);
@@ -123,8 +128,10 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
           ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
         } else {
           LOG.error(exceptionMessage, cause);
-          HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1,
-                                                          HttpResponseStatus.INTERNAL_SERVER_ERROR);
+          HttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,
+                                                              HttpResponseStatus.INTERNAL_SERVER_ERROR);
+          HttpUtil.setContentLength(response, 0);
+          HttpUtil.setKeepAlive(response, false);
           ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
         }
       }
