@@ -51,9 +51,16 @@ Example: A simple HTTP service that responds to the ``/v1/ping`` endpoint can be
   }
 
   // Setup HTTP service and add Handlers
-  NettyHttpService service = NettyHttpService.builder()
+
+  // You can either add varargs of HttpHandler or as a list of HttpHanlders as below to the NettyService Builder
+
+  List<HttpHandler> handlers = new ArrayList<>();
+  handlers.add(new PingHandler());
+  handlers.add(...otherHandler...)
+
+  NettyHttpService service = NettyHttpService.builder("Name_of_app")
                              .setPort(7777)  // Optionally set the port. If unset, it will bind to an ephemeral port
-                             .addHttpHandlers(new PingHandler())
+                             .setHttpHandlers(handlers)
                              .build();
 
   // Start the HTTP service
@@ -140,9 +147,16 @@ Example: Sample HTTP service that manages an application lifecycle:
   }
 
   // Setup HTTP service and add Handlers
-  NettyHttpService service = NettyHttpService.builder()
+
+  // You can either add varargs of HttpHandler or as a list of HttpHanlders as below to the NettyService Builder
+
+    List<HttpHandler> handlers = new ArrayList<>();
+    handlers.add(new PingHandler());
+    handlers.add(...otherHandler...)
+
+  NettyHttpService service = NettyHttpService.builder("Name_of_app")
                             .setPort(7777)
-                            .addHttpHandlers(new ApplicationHandler())
+                            .setHttpHandlers(handlers)
                             .build();
 
   // Start the HTTP service
