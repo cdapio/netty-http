@@ -26,9 +26,12 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpContentCompressor;
@@ -44,6 +47,7 @@ import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ObjectStreamClass;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,6 +71,8 @@ import javax.annotation.Nullable;
 public final class NettyHttpService {
 
   private static final Logger LOG = LoggerFactory.getLogger(NettyHttpService.class);
+  private static final String BOSS_THREADGROUP_NAME = "-boss-thread-%d";
+  private static final String WORKER_THREADGROUP_NAME = "-worker-thread-%d";
 
   private enum State {
     NOT_STARTED,
@@ -94,6 +100,7 @@ public final class NettyHttpService {
   private ChannelGroup channelGroup;
   private EventExecutorGroup eventExecutorGroup;
   private InetSocketAddress bindAddress;
+  private boolean useNativeTransport;
 
   /**
    * Initialize NettyHttpService. Also includes SSL implementation.
@@ -112,6 +119,7 @@ public final class NettyHttpService {
    * @param pipelineModifier Function used to modify the pipeline.
    * @param sslHandlerFactory Object used to share SSL certificate details
    * @param exceptionHandler Handles exceptions from calling handler methods
+   * @param useNativeTransport Ability to use Native Protocol if available.
    */
   private NettyHttpService(String serviceName,
                            InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
@@ -122,7 +130,8 @@ public final class NettyHttpService {
                            Iterable<? extends HttpHandler> httpHandlers,
                            Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit,
                            ChannelPipelineModifier pipelineModifier,
-                           SSLHandlerFactory sslHandlerFactory, ExceptionHandler exceptionHandler) {
+                           SSLHandlerFactory sslHandlerFactory, ExceptionHandler exceptionHandler,
+                           boolean useNativeTransport) {
     this.serviceName = serviceName;
     this.bindAddress = bindAddress;
     this.bossThreadPoolSize = bossThreadPoolSize;
@@ -138,6 +147,7 @@ public final class NettyHttpService {
     this.pipelineModifier = pipelineModifier;
     this.sslHandlerFactory = sslHandlerFactory;
     this.state = State.NOT_STARTED;
+    this.useNativeTransport = useNativeTransport;
   }
 
   /**
@@ -319,14 +329,11 @@ public final class NettyHttpService {
    * Creates the server bootstrap.
    */
   private ServerBootstrap createBootstrap(final ChannelGroup channelGroup) throws Exception {
-    EventLoopGroup bossGroup = new NioEventLoopGroup(bossThreadPoolSize,
-                                                     createDaemonThreadFactory(serviceName + "-boss-thread-%d"));
-    EventLoopGroup workerGroup = new NioEventLoopGroup(workerThreadPoolSize,
-                                                       createDaemonThreadFactory(serviceName + "-worker-thread-%d"));
     ServerBootstrap bootstrap = new ServerBootstrap();
     bootstrap
-      .group(bossGroup, workerGroup)
-      .channel(NioServerSocketChannel.class)
+      .group(createEventLoopGroup(bossThreadPoolSize, BOSS_THREADGROUP_NAME),
+              createEventLoopGroup(workerThreadPoolSize, WORKER_THREADGROUP_NAME))
+      .channel(selectSocketChannel())
       .childHandler(new ChannelInitializer<SocketChannel>() {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
@@ -362,6 +369,30 @@ public final class NettyHttpService {
     }
 
     return bootstrap;
+  }
+
+
+  /**
+   * Will create native transport of eventloopgroup if set.
+   * @param threadPoolSize
+   * @return
+   */
+  private EventLoopGroup createEventLoopGroup(int threadPoolSize, String threadGroupName) {
+    if (this.useNativeTransport && OsUtils.isOSLinux()) {
+      return new EpollEventLoopGroup(threadPoolSize, createDaemonThreadFactory(serviceName + threadGroupName));
+    }
+    return new NioEventLoopGroup(threadPoolSize, createDaemonThreadFactory(serviceName + threadGroupName));
+  }
+
+  /**
+   * Will return the appropriate ServerSocketChannel based on the choice of the transport.
+   * @return
+   */
+  private Class<? extends ServerSocketChannel> selectSocketChannel() {
+    if (useNativeTransport && OsUtils.isOSLinux()) {
+      return EpollServerSocketChannel.class;
+    }
+    return NioServerSocketChannel.class;
   }
 
   /**
@@ -430,6 +461,7 @@ public final class NettyHttpService {
     private SSLHandlerFactory sslHandlerFactory;
     private ChannelPipelineModifier pipelineModifier;
     private ExceptionHandler exceptionHandler;
+    private boolean useNativeTransport;
 
     // Protected constructor to prevent instantiating Builder instance directly.
     protected Builder(String serviceName) {
@@ -446,6 +478,7 @@ public final class NettyHttpService {
       channelConfigs.put(ChannelOption.SO_BACKLOG, DEFAULT_CONNECTION_BACKLOG);
       sslHandlerFactory = null;
       exceptionHandler = new ExceptionHandler();
+      useNativeTransport = false;
     }
 
     /**
@@ -654,6 +687,15 @@ public final class NettyHttpService {
     }
 
     /**
+     * This will set the native transport instead of NIO transport which is more efficient. More info
+     * <a href="https://github.com/netty/netty/wiki/Native-transports">native protocol</a>
+     */
+    public Builder setUseNativeTransport(boolean useNativeTransport) {
+      this.useNativeTransport = useNativeTransport;
+      return this;
+    }
+
+    /**
      * @return instance of {@code NettyHttpService}
      */
     public NettyHttpService build() {
@@ -667,7 +709,7 @@ public final class NettyHttpService {
       return new NettyHttpService(serviceName, bindAddress, bossThreadPoolSize, workerThreadPoolSize,
                                   execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, childChannelConfigs,
                                   rejectedExecutionHandler, urlRewriter, handlers, handlerHooks, httpChunkLimit,
-                                  pipelineModifier, sslHandlerFactory, exceptionHandler);
+                                  pipelineModifier, sslHandlerFactory, exceptionHandler, useNativeTransport);
     }
   }
 }
