@@ -144,6 +144,7 @@ public final class NettyHttpService {
    * Creates a {@link Builder} for creating new instance of {@link NettyHttpService}.
    *
    * @param serviceName name of the http service. The name will be used to name threads created for the service.
+   * @return builder for creating a NettyHttpService
    */
   public static Builder builder(String serviceName) {
     return new Builder(serviceName);
@@ -625,6 +626,12 @@ public final class NettyHttpService {
       return this;
     }
 
+    /**
+     * Set the HTTP chunk limit.
+     *
+     * @param value the chunk limit
+     * @return instance of {@code Builder}.
+     */
     public Builder setHttpChunkLimit(int value) {
       this.httpChunkLimit = value;
       return this;
@@ -632,6 +639,9 @@ public final class NettyHttpService {
 
     /**
      * Enable SSL by using the provided SSL information.
+     *
+     * @param sslConfig the SSL configuration
+     * @return instance of {@code Builder}.
      */
     public Builder enableSSL(SSLConfig sslConfig) {
       return enableSSL(new SSLHandlerFactory(sslConfig));
@@ -639,12 +649,21 @@ public final class NettyHttpService {
 
     /**
      * Enable SSL by using the given {@link SSLHandlerFactory} to create {@link SslHandler}.
+     *
+     * @param sslHandlerFactory the factory for creating SslHandlers
+     * @return instance of {@code Builder}.
      */
     public Builder enableSSL(SSLHandlerFactory sslHandlerFactory) {
       this.sslHandlerFactory = sslHandlerFactory;
       return this;
     }
 
+    /**
+     * Set the {@link ExceptionHandler} for the service.
+     *
+     * @param exceptionHandler the exception handler to use
+     * @return instance of {@code Builder}.
+     */
     public Builder setExceptionHandler(ExceptionHandler exceptionHandler) {
       if (exceptionHandler == null) {
         throw new IllegalArgumentException("exceptionHandler cannot be null");

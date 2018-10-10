@@ -73,6 +73,10 @@ public class SSLConfig {
   }
 
   /**
+   * Creates a builder for the SSLConfig.
+   *
+   * @param keyStore the keystore
+   * @param keyStorePassword the password for the keystore
    * @return instance of {@code Builder}
    */
   public static Builder builder(File keyStore, String keyStorePassword) {
