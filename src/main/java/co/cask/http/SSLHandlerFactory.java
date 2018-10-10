@@ -78,6 +78,9 @@ public class SSLHandlerFactory {
   }
 
   /**
+   * Creates an SslHandler
+   *
+   * @param bufferAllocator the buffer allocator
    * @return instance of {@code SslHandler}
    */
   public SslHandler create(ByteBufAllocator bufferAllocator) {

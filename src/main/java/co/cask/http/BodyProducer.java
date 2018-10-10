@@ -32,6 +32,8 @@ public abstract class BodyProducer {
    * won't be set and {@code Transfer-Encoding: chunked} will be used.
    * </p>
    * By default, {@code -1L} is returned.
+   *
+   * @return the size of the content in bytes
    */
   public long getContentLength() {
     return -1L;
@@ -41,6 +43,7 @@ public abstract class BodyProducer {
    * Returns a {@link ByteBuf} representing the next chunk of bytes to send. If the returned
    * {@link ByteBuf} is an empty buffer, it signals the end of the streaming.
    *
+   * @return the next chunk of bytes to send
    * @throws Exception if there is any error
    */
   public abstract ByteBuf nextChunk() throws Exception;
