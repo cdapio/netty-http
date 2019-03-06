@@ -2,12 +2,6 @@ netty-http
 ==========
 A library to develop HTTP services with `Netty <http://netty.io/>`__. Supports the capability to route end-points based on `JAX-RS <https://jax-rs-spec.java.net/>`__-style annotations. Implements Guava's Service interface to manage the runtime-state of the HTTP service.
 
-.. <!--
-.. Does it work?
-.. -------------
-.. [![Build Status](https://travis-ci.org/caskdata/netty-http.svg?branch=develop)](https://travis-ci.org/caskdata/netty-http)
-.. -->
-
 Need for this library 
 ---------------------
 `Netty <http://netty.io/>`__ is a powerful framework to write asynchronous event-driven high-performance applications. While it is relatively easy to write a RESTful HTTP service using netty, the mapping between HTTP routes to handlers is
@@ -24,7 +18,7 @@ Build the HTTP Library
 
 ::
 
-  $ git clone https://github.com/caskdata/netty-http.git
+  $ git clone https://github.com/cdapio/netty-http.git
   $ cd netty-http
   $ mvn clean package
 
@@ -197,14 +191,14 @@ Are you interested in making netty-http better? Our development model is a simpl
 * Fork netty-http into your own GitHub repository
 * Create a topic branch with an appropriate name
 * Work on your favorite feature to your content
-* Once you are satisfied, create a pull request by going to the caskdata/netty-http project.
+* Once you are satisfied, create a pull request by going to the cdapio/netty-http project.
 * Address all the review comments
-* Once addressed, the changes will be committed to the caskdata/netty-http repo.
+* Once addressed, the changes will be committed to the cdapio/netty-http repo.
 
 License
 =======
 
-Copyright © 2014-2015 Cask Data, Inc. All Rights Reserved.
+Copyright © 2014-2019 Cask Data, Inc. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
 
