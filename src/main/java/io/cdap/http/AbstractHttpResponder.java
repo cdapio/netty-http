@@ -16,6 +16,7 @@
 
 package io.cdap.http;
 
+import io.cdap.http.internal.InternalUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -27,7 +28,6 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 
 /**
  * Base implementation of {@link HttpResponder} to simplify child implementations.
@@ -35,7 +35,6 @@ import java.nio.charset.StandardCharsets;
 public abstract class AbstractHttpResponder implements HttpResponder {
 
   protected static final String OCTET_STREAM_TYPE = "application/octet-stream";
-
   @Override
   public void sendJson(HttpResponseStatus status, String jsonString) {
     sendString(status, jsonString, new DefaultHttpHeaders().add(HttpHeaderNames.CONTENT_TYPE.toString(),
@@ -53,7 +52,7 @@ public abstract class AbstractHttpResponder implements HttpResponder {
       sendStatus(status, headers);
       return;
     }
-    ByteBuf buffer = Unpooled.wrappedBuffer(StandardCharsets.UTF_8.encode(data));
+    ByteBuf buffer = Unpooled.wrappedBuffer(InternalUtil.UTF_8.encode(data));
     sendContent(status, buffer, addContentTypeIfMissing(new DefaultHttpHeaders().add(headers),
                                                         "text/plain; charset=utf-8"));
   }
@@ -80,7 +79,7 @@ public abstract class AbstractHttpResponder implements HttpResponder {
   }
 
   @Override
-  public void sendFile(File file) throws IOException {
+  public void sendFile(File file) throws Throwable {
     sendFile(file, EmptyHttpHeaders.INSTANCE);
   }
 

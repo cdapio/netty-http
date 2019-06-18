@@ -124,8 +124,9 @@ public interface HttpResponder {
    *
    * @param file The file to send
    * @throws IOException if failed to open and read the file
+   * @throws Throwable 
    */
-  void sendFile(File file) throws IOException;
+  void sendFile(File file) throws IOException, Throwable;
 
   /**
    * Sends a file content back to client with response status 200. Default content type is "application/octet-stream",
@@ -134,8 +135,9 @@ public interface HttpResponder {
    * @param file The file to send
    * @param headers additional headers to send with the response.
    * @throws IOException if failed to open and read the file
+   * @throws Throwable 
    */
-  void sendFile(File file, HttpHeaders headers) throws IOException;
+  void sendFile(File file, HttpHeaders headers) throws IOException, Throwable;
 
   /**
    * Sends response back to client. The response body is produced by the given {@link BodyProducer}. This method

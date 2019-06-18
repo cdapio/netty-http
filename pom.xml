@@ -62,14 +62,14 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <surefire.redirectTestOutputToFile>true</surefire.redirectTestOutputToFile>
 
-    <rs-api.version>2.0</rs-api.version>
-    <netty.version>4.1.16.Final</netty.version>
-    <slf4j.version>1.7.5</slf4j.version>
+    <rs-api.version>2.1.1</rs-api.version>
+    <netty.version>4.1.36.Final</netty.version>
+    <slf4j.version>1.7.26</slf4j.version>
     <findbugs.version>2.0.1</findbugs.version>
     <beanutils.version>1.8.3</beanutils.version>
-    <junit.version>4.11</junit.version>
-    <logback.version>1.0.9</logback.version>
-    <gson.version>2.2.4</gson.version>
+    <junit.version>4.12</junit.version>
+    <logback.version>1.2.3</logback.version>
+    <gson.version>2.8.5</gson.version>
   </properties>
 
   <dependencies>
@@ -135,10 +135,27 @@
       <version>${gson.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+    	<groupId>io.cdap.http</groupId>
+    	<artifactId>netty-http</artifactId>
+    	<version>1.2.0</version>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>animal-sniffer-maven-plugin</artifactId>
+        <version>1.16</version>
+        <configuration>
+          <signature>
+            <groupId>org.codehaus.mojo.signature</groupId>
+            <artifactId>java16</artifactId>
+	    <version>1.0</version>
+          </signature>
+        </configuration>
+      </plugin>
       <!-- Compiler -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -174,7 +191,6 @@
           </execution>
         </executions>
       </plugin>
-
       <!-- Checkstyle -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

@@ -32,7 +32,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import javax.annotation.Nullable;
 
 /**
@@ -49,9 +49,16 @@ public class InternalHttpResponderTest {
 
     InternalHttpResponse response = responder.getResponse();
     Assert.assertEquals(HttpResponseStatus.OK.code(), response.getStatusCode());
-    try (Reader reader = new InputStreamReader(response.openInputStream(), "UTF-8")) {
+  
+    Reader reader = null;
+    try {
+      reader = new InputStreamReader(response.openInputStream(), "UTF-8");
       JsonObject responseData = new Gson().fromJson(reader, JsonObject.class);
       Assert.assertEquals(output, responseData);
+    } finally {
+      if (reader != null) {
+        reader.close();
+      }
     }
   }
 
@@ -74,7 +81,7 @@ public class InternalHttpResponderTest {
   @Test
   public void testSendByteArray() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
-    responder.sendByteArray(HttpResponseStatus.OK, "abc".getBytes(StandardCharsets.UTF_8), EmptyHttpHeaders.INSTANCE);
+    responder.sendByteArray(HttpResponseStatus.OK, "abc".getBytes(Charset.forName("UTF-8")), EmptyHttpHeaders.INSTANCE);
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
   }
@@ -91,9 +98,9 @@ public class InternalHttpResponderTest {
   public void testChunks() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
     ChunkResponder chunkResponder = responder.sendChunkStart(HttpResponseStatus.OK, null);
-    chunkResponder.sendChunk(Unpooled.wrappedBuffer("a".getBytes(StandardCharsets.UTF_8)));
-    chunkResponder.sendChunk(Unpooled.wrappedBuffer("b".getBytes(StandardCharsets.UTF_8)));
-    chunkResponder.sendChunk(Unpooled.wrappedBuffer("c".getBytes(StandardCharsets.UTF_8)));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("a".getBytes(Charset.forName("UTF-8"))));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("b".getBytes(Charset.forName("UTF-8"))));
+    chunkResponder.sendChunk(Unpooled.wrappedBuffer("c".getBytes(Charset.forName("UTF-8"))));
     chunkResponder.close();
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
@@ -102,7 +109,7 @@ public class InternalHttpResponderTest {
   @Test
   public void testSendContent() throws IOException {
     InternalHttpResponder responder = new InternalHttpResponder();
-    responder.sendContent(HttpResponseStatus.OK, Unpooled.wrappedBuffer("abc".getBytes(StandardCharsets.UTF_8)),
+    responder.sendContent(HttpResponseStatus.OK, Unpooled.wrappedBuffer("abc".getBytes(Charset.forName("UTF-8"))),
                           new DefaultHttpHeaders().set(HttpHeaderNames.CONTENT_TYPE, "contentType"));
 
     validateResponse(responder.getResponse(), HttpResponseStatus.OK, "abc");
@@ -116,9 +123,15 @@ public class InternalHttpResponderTest {
     if (expectedData != null) {
       // read it twice to make sure the input supplier gives the full stream more than once.
       for (int i = 0; i < 2; i++) {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.openInputStream(), "UTF-8"))) {
+        BufferedReader reader = null;
+        try {
+          reader = new BufferedReader(new InputStreamReader(response.openInputStream(), "UTF-8"));
           String data = reader.readLine();
           Assert.assertEquals(expectedData, data);
+        } finally {
+          if (reader != null) {
+            reader.close();
+          }
         }
       }
     }

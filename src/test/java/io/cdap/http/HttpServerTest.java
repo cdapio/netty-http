@@ -65,8 +65,7 @@ import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -129,7 +128,7 @@ public class HttpServerTest {
   public static TemporaryFolder tmpFolder = new TemporaryFolder();
 
   @BeforeClass
-  public static void setup() throws Exception {
+  public static void setup() throws Throwable {
     service = createBaseNettyHttpServiceBuilder().build();
     service.start();
     int port = service.getBindAddress().getPort();
@@ -137,7 +136,7 @@ public class HttpServerTest {
   }
 
   @AfterClass
-  public static void teardown() throws Exception {
+  public static void teardown() throws Throwable {
     String serviceName = service.getServiceName();
     service.stop();
 
@@ -170,7 +169,9 @@ public class HttpServerTest {
     File filePath = new File(tmpFolder.newFolder(), "test.txt");
 
     URI uri = baseURI.resolve("/test/v1/stream/upload/file");
-    try (Socket socket = createRawSocket(uri.toURL())) {
+    Socket socket = null;
+    try {
+      socket = createRawSocket(uri.toURL());
 
       // Make a PUT call through socket, so that we can close it prematurely
       PrintStream printer = new PrintStream(socket.getOutputStream(), true, "UTF-8");
@@ -191,6 +192,10 @@ public class HttpServerTest {
       }
       Assert.assertTrue(counter < 100);
       // close the socket prematurely
+    } finally {
+      if (socket != null) {
+        socket.close();
+      }
     }
 
     // The file should get removed because of incomplete request due to connection closed
@@ -207,7 +212,7 @@ public class HttpServerTest {
     File filePath = new File(tmpFolder.newFolder(), "test.txt");
     HttpURLConnection urlConn = request("/test/v1/stream/file", HttpMethod.POST);
     urlConn.setRequestProperty("File-Path", filePath.getAbsolutePath());
-    urlConn.getOutputStream().write("content".getBytes(StandardCharsets.UTF_8));
+    urlConn.getOutputStream().write("content".getBytes(Charset.forName("UTF-8")));
     Assert.assertEquals(200, urlConn.getResponseCode());
     String result = getContent(urlConn);
     Assert.assertEquals("content", result);
@@ -254,7 +259,7 @@ public class HttpServerTest {
 
     //test stream upload
     HttpURLConnection urlConn = request("/test/v1/stream/upload", HttpMethod.PUT);
-    Files.copy(fname.toPath(), urlConn.getOutputStream());
+    FileUtils.copy(fname.getPath(), urlConn.getOutputStream());
     Assert.assertEquals(200, urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -269,7 +274,7 @@ public class HttpServerTest {
     randf.close();
 
     HttpURLConnection urlConn = request("/test/v1/stream/upload/fail", HttpMethod.PUT);
-    Files.copy(fname.toPath(), urlConn.getOutputStream());
+    FileUtils.copy(fname.getPath(), urlConn.getOutputStream());
     Assert.assertEquals(500, urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -286,7 +291,7 @@ public class HttpServerTest {
     //test chunked upload
     HttpURLConnection urlConn = request("/test/v1/aggregate/upload", HttpMethod.PUT);
     urlConn.setChunkedStreamingMode(1024);
-    Files.copy(fname.toPath(), urlConn.getOutputStream());
+    FileUtils.copy(fname.getPath(), urlConn.getOutputStream());
     Assert.assertEquals(200, urlConn.getResponseCode());
 
     Assert.assertEquals(size, Integer.parseInt(getContent(urlConn).split(":")[1].trim()));
@@ -305,7 +310,7 @@ public class HttpServerTest {
     //test chunked upload
     HttpURLConnection urlConn = request("/test/v1/aggregate/upload", HttpMethod.PUT);
     urlConn.setChunkedStreamingMode(1024);
-    Files.copy(fname.toPath(), urlConn.getOutputStream());
+    FileUtils.copy(fname.getPath(), urlConn.getOutputStream());
     Assert.assertEquals(413, urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -391,7 +396,7 @@ public class HttpServerTest {
       }
     };
 
-    final BlockingQueue<HttpResponse> queue = new ArrayBlockingQueue<>(1);
+    final BlockingQueue<HttpResponse> queue = new ArrayBlockingQueue<HttpResponse>(1);
     Bootstrap bootstrap = new Bootstrap()
       .channel(NioSocketChannel.class)
       .remoteAddress(url.getHost(), url.getPort())
@@ -418,7 +423,7 @@ public class HttpServerTest {
 
     // Make one request, expects the connection to remain active.
     HttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.PUT, url.getPath(),
-                                                     Unpooled.copiedBuffer("data", StandardCharsets.UTF_8));
+                                                     Unpooled.copiedBuffer("data", Charset.forName("UTF-8")));
     HttpUtil.setContentLength(request, 4);
     channel.writeAndFlush(request);
     HttpResponse response = queue.poll(10, TimeUnit.SECONDS);
@@ -432,7 +437,7 @@ public class HttpServerTest {
     // Make one more request, the connection should remain open.
     // This request is make with connection: closed
     request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.PUT, url.getPath(),
-                                         Unpooled.copiedBuffer("data", StandardCharsets.UTF_8));
+                                         Unpooled.copiedBuffer("data", Charset.forName("UTF-8")));
     HttpUtil.setContentLength(request, 4);
     HttpUtil.setKeepAlive(request, false);
     channel.writeAndFlush(request);
@@ -592,7 +597,7 @@ public class HttpServerTest {
   @Test
   public void testSortedSetQueryParam() throws IOException {
     // For collection, if missing parameter, should get defaulted to empty collection
-    SortedSet<Integer> expected = new TreeSet<>();
+    SortedSet<Integer> expected = new TreeSet<Integer>();
     testContent("/test/v1/sortedSetQueryParam", GSON.toJson(expected), HttpMethod.GET);
 
     expected.add(10);
@@ -643,7 +648,9 @@ public class HttpServerTest {
 
     // Fire http request using raw socket so that we can verify the connection get closed by the server
     // after the response.
-    try (Socket socket = createRawSocket(url)) {
+    Socket socket = null;
+    try {
+      socket = createRawSocket(url);
       PrintStream printer = new PrintStream(socket.getOutputStream(), false, "UTF-8");
       printer.printf("GET %s HTTP/1.1\r\n", url.getPath());
       printer.printf("Host: %s:%d\r\n", url.getHost(), url.getPort());
@@ -654,6 +661,10 @@ public class HttpServerTest {
       // end with an EOF. Otherwise there will be timeout of this test case
       String response = getContent(socket.getInputStream());
       Assert.assertTrue(response.startsWith("HTTP/1.1 200 OK"));
+    } finally {
+      if (socket != null) {
+        socket.close();
+      }
     }
   }
 
@@ -662,7 +673,7 @@ public class HttpServerTest {
     HttpURLConnection urlConn = request("/test/v1/uploadReject", HttpMethod.POST, true);
     try {
       urlConn.setChunkedStreamingMode(1024);
-      urlConn.getOutputStream().write("Rejected Content".getBytes(StandardCharsets.UTF_8));
+      urlConn.getOutputStream().write("Rejected Content".getBytes(Charset.forName("UTF-8")));
       try {
         urlConn.getInputStream();
         Assert.fail();
@@ -716,21 +727,21 @@ public class HttpServerTest {
     // exception in body consumer's chunk
     urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
     urlConn.setRequestProperty("failOn", "chunk");
-    Files.copy(fname.toPath(), urlConn.getOutputStream());
+    FileUtils.copy(fname.getPath(), urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.code(), urlConn.getResponseCode());
     urlConn.disconnect();
 
     // exception in body consumer's onFinish
     urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
     urlConn.setRequestProperty("failOn", "finish");
-    Files.copy(fname.toPath(), urlConn.getOutputStream());
+    FileUtils.copy(fname.getPath(), urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.code(), urlConn.getResponseCode());
     urlConn.disconnect();
 
     // exception in body consumer's handleError
     urlConn = request("/test/v1/stream/customException", HttpMethod.POST);
     urlConn.setRequestProperty("failOn", "error");
-    Files.copy(fname.toPath(), urlConn.getOutputStream());
+    FileUtils.copy(fname.getPath(), urlConn.getOutputStream());
     Assert.assertEquals(TestHandler.CustomException.HTTP_RESPONSE_STATUS.code(), urlConn.getResponseCode());
     urlConn.disconnect();
   }
@@ -771,7 +782,7 @@ public class HttpServerTest {
     urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
 
     Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
-    Assert.assertTrue(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()) != null);
+    Assert.assertNotNull(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()));
 
     Assert.assertEquals("Testing message", getContent(urlConn));
 
@@ -796,7 +807,7 @@ public class HttpServerTest {
       urlConn.setRequestProperty("Expect", "100-continue");
       urlConn.setRequestProperty("File-Path", filePath.getAbsolutePath());
 
-      urlConn.getOutputStream().write("content".getBytes(StandardCharsets.UTF_8));
+      urlConn.getOutputStream().write("content".getBytes(Charset.forName("UTF-8")));
       Assert.assertEquals(200, urlConn.getResponseCode());
       String result = getContent(urlConn);
       Assert.assertEquals("content", result);
@@ -823,7 +834,7 @@ public class HttpServerTest {
     Assert.assertEquals(200, urlConn.getResponseCode());
     Map<String, List<String>> headers = urlConn.getHeaderFields();
 
-    Assert.assertEquals(new HashSet<>(Arrays.asList("v1", "v2", "v3")), new HashSet<>(headers.get("k1")));
+    Assert.assertEquals(new HashSet<String>(Arrays.asList("v1", "v2", "v3")), new HashSet<String>(headers.get("k1")));
     Assert.assertEquals(Collections.singletonList("v1"), headers.get("k2"));
   }
 
@@ -886,10 +897,10 @@ public class HttpServerTest {
     while (buffer.writeBytes(is, 1024) > 0) {
       // no-op
     }
-    return buffer.toString(StandardCharsets.UTF_8);
+    return buffer.toString(Charset.forName("UTF-8"));
   }
 
   private void writeContent(HttpURLConnection urlConn, String content) throws IOException {
-    urlConn.getOutputStream().write(content.getBytes(StandardCharsets.UTF_8));
+    urlConn.getOutputStream().write(content.getBytes(Charset.forName("UTF-8")));
   }
 }

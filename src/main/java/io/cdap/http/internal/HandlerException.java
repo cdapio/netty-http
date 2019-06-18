@@ -24,8 +24,6 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 
-import java.nio.charset.StandardCharsets;
-
 /**
  *Creating Http Response for Exception messages.
  */
@@ -48,7 +46,7 @@ final class HandlerException extends Exception {
 
   HttpResponse createFailureResponse() {
     FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, failureStatus,
-                                                            Unpooled.copiedBuffer(message, StandardCharsets.UTF_8));
+                                                            Unpooled.copiedBuffer(message, InternalUtil.UTF_8));
     HttpUtil.setContentLength(response, response.content().readableBytes());
     return response;
   }
