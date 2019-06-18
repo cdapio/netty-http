@@ -44,6 +44,7 @@ import java.util.Set;
 import javax.annotation.Nullable;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
+import javax.ws.rs.OPTIONS;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
@@ -135,7 +136,7 @@ public final class HttpResourceHandler implements HttpHandler {
    * @return String representation of HttpMethod from annotations or emptyString as a default.
    */
   private Set<HttpMethod> getHttpMethods(Method method) {
-    Set<HttpMethod> httpMethods = new HashSet<>();
+    Set<HttpMethod> httpMethods = new HashSet<HttpMethod>();
 
     if (method.isAnnotationPresent(GET.class)) {
       httpMethods.add(HttpMethod.GET);
@@ -148,6 +149,9 @@ public final class HttpResourceHandler implements HttpHandler {
     }
     if (method.isAnnotationPresent(DELETE.class)) {
       httpMethods.add(HttpMethod.DELETE);
+    }
+    if (method.isAnnotationPresent(OPTIONS.class)) {
+      httpMethods.add(HttpMethod.OPTIONS);
     }
 
     return Collections.unmodifiableSet(httpMethods);
@@ -310,7 +314,8 @@ public final class HttpResourceHandler implements HttpHandler {
 
     LOG.trace("Routable destinations for request {}: {}", requestUri, routableDestinations);
     Iterable<String> requestUriParts = splitAndOmitEmpty(requestUri, '/');
-    List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> matchedDestinations = new ArrayList<>();
+    List<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>> matchedDestinations =
+            new ArrayList<PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel>>();
     long maxScore = 0;
 
     for (PatternPathRouterWithGroups.RoutableDestination<HttpResourceModel> destination : routableDestinations) {
@@ -390,7 +395,7 @@ public final class HttpResourceHandler implements HttpHandler {
   }
 
   private static <T> List<T> copyOf(Iterable<? extends T> iterable) {
-    List<T> list = new ArrayList<>();
+    List<T> list = new ArrayList<T>();
     for (T item : iterable) {
       list.add(item);
     }

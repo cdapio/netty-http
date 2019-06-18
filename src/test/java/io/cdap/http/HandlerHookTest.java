@@ -50,7 +50,7 @@ public class HandlerHookTest {
   private static final TestHandlerHook handlerHook2 = new TestHandlerHook();
 
   @BeforeClass
-  public static void setup() throws Exception {
+  public static void setup() throws Throwable {
 
     NettyHttpService.Builder builder = NettyHttpService.builder("test-hook");
     builder.setHttpHandlers(new TestHandler());
@@ -155,7 +155,7 @@ public class HandlerHookTest {
   }
 
   @AfterClass
-  public static void teardown() throws Exception {
+  public static void teardown() throws Throwable {
     service.stop();
   }
 
@@ -227,7 +227,7 @@ public class HandlerHookTest {
   }
 
   private static int doGet(String resource, String key, String value, String...keyValues) throws Exception {
-    Map<String, String> headerMap = new HashMap<>();
+    Map<String, String> headerMap = new HashMap<String, String>();
     headerMap.put(key, value);
 
     for (int i = 0; i < keyValues.length; i += 2) {

@@ -48,7 +48,8 @@ import javax.ws.rs.QueryParam;
 public final class HttpResourceModel {
 
   private static final Set<Class<? extends Annotation>> SUPPORTED_PARAM_ANNOTATIONS =
-    Collections.unmodifiableSet(new HashSet<>(Arrays.asList(PathParam.class, QueryParam.class, HeaderParam.class)));
+    Collections.unmodifiableSet(new HashSet<Class<? extends Annotation>>
+            (Arrays.asList(PathParam.class, QueryParam.class, HeaderParam.class)));
 
   private final Set<HttpMethod> httpMethods;
   private final String path;
@@ -211,13 +212,15 @@ public final class HttpResourceModel {
       return Collections.emptyList();
     }
 
-    List<Map<Class<? extends Annotation>, ParameterInfo<?>>> result = new ArrayList<>();
+    List<Map<Class<? extends Annotation>, ParameterInfo<?>>> result =
+            new ArrayList<Map<Class<? extends Annotation>, ParameterInfo<?>>>();
     Type[] parameterTypes = method.getGenericParameterTypes();
     Annotation[][] parameterAnnotations = method.getParameterAnnotations();
 
     for (int i = 2; i < parameterAnnotations.length; i++) {
       Annotation[] annotations = parameterAnnotations[i];
-      Map<Class<? extends Annotation>, ParameterInfo<?>> paramAnnotations = new IdentityHashMap<>();
+      Map<Class<? extends Annotation>, ParameterInfo<?>> paramAnnotations =
+              new IdentityHashMap<Class<? extends Annotation>, ParameterInfo<?>>();
 
       for (Annotation annotation : annotations) {
         Class<? extends Annotation> annotationType = annotation.annotationType();
@@ -266,7 +269,7 @@ public final class HttpResourceModel {
     private final Converter<T, Object> converter;
 
     static <V> ParameterInfo<V> create(Annotation annotation, @Nullable Converter<V, Object> converter) {
-      return new ParameterInfo<>(annotation, converter);
+      return new ParameterInfo<V>(annotation, converter);
     }
 
     private ParameterInfo(Annotation annotation, @Nullable Converter<T, Object> converter) {

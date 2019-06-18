@@ -70,10 +70,16 @@ public class SSLHandlerFactory {
   }
 
   private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws Exception {
-    try (InputStream is = new FileInputStream(keyStore)) {
+    InputStream is = null;
+    try {
+      is = new FileInputStream(keyStore);
       KeyStore ks = KeyStore.getInstance("JKS");
       ks.load(is, keyStorePassword.toCharArray());
       return ks;
+    } finally {
+      if (is != null) {
+        is.close();
+      }
     }
   }
 

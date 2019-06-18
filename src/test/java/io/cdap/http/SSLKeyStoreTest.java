@@ -23,8 +23,6 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 
 /**
  * Tests SSL KeyStore behaviour
@@ -38,8 +36,14 @@ public class SSLKeyStoreTest {
   @BeforeClass
   public static void setup() throws Exception {
     keyStore = tmpFolder.newFile();
-    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks")) {
-      Files.copy(is, keyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    InputStream is = null;
+    try {
+      is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks");
+      FileUtils.copy(is, keyStore.getPath());
+    } finally {
+      if (is != null) {
+        is.close();
+      }
     }
   }
 

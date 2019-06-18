@@ -50,7 +50,6 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -105,7 +104,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   }
 
   @Override
-  public void sendFile(File file, HttpHeaders headers) throws IOException {
+  public void sendFile(File file, HttpHeaders headers) throws Throwable {
     HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
     addContentTypeIfMissing(response.headers().add(headers), OCTET_STREAM_TYPE);
 
@@ -136,7 +135,6 @@ final class BasicHttpResponder extends AbstractHttpResponder {
       try {
         raf.close();
       } catch (IOException ex) {
-        t.addSuppressed(ex);
       }
       throw t;
     }
@@ -152,7 +150,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
       // Response with error and close the connection
       sendContent(
         HttpResponseStatus.INTERNAL_SERVER_ERROR,
-        Unpooled.copiedBuffer("Failed to determined content length. Cause: " + t.getMessage(), StandardCharsets.UTF_8),
+        Unpooled.copiedBuffer("Failed to determined content length. Cause: " + t.getMessage(), InternalUtil.UTF_8),
         new DefaultHttpHeaders()
           .set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE)
           .set(HttpHeaderNames.CONTENT_TYPE, "text/plain; charset=utf-8"));
@@ -197,7 +195,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   private ChannelFutureListener createBodyProducerCompletionListener(final BodyProducer bodyProducer) {
     return new ChannelFutureListener() {
       @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
+      public void operationComplete(ChannelFuture future) {
         if (!future.isSuccess()) {
           callBodyProducerHandleError(bodyProducer, future.cause());
           channel.close();
