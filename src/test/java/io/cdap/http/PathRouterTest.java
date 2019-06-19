@@ -109,8 +109,9 @@ public class PathRouterTest {
 
     routes = pathRouter.getDestinations("/multi/match/def");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(new HashSet<>(Arrays.asList("multi-match-def", "multi-match-*")),
-                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+    Assert.assertEquals(new HashSet<String>(Arrays.asList("multi-match-def", "multi-match-*")),
+                        new HashSet<String>(Arrays.asList(routes.get(0).getDestination(),
+                                routes.get(1).getDestination())));
     Assert.assertTrue(routes.get(0).getGroupNameValues().isEmpty());
     Assert.assertTrue(routes.get(1).getGroupNameValues().isEmpty());
 
@@ -121,35 +122,38 @@ public class PathRouterTest {
 
     routes = pathRouter.getDestinations("/multi/maxmatch/id1");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(new HashSet<>(Arrays.asList("multi-max-match-id", "multi-max-match-*")),
-                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+    Assert.assertEquals(new HashSet<String>(Arrays.asList("multi-max-match-id", "multi-max-match-*")),
+                        new HashSet<String>(Arrays.asList(routes.get(0).getDestination(),
+                                routes.get(1).getDestination())));
 
-    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+    Assert.assertEquals(new HashSet<java.util.Map<String, String>>(Arrays.asList(Collections.singletonMap("id", "id1"),
                                                     Collections.<String, String>emptyMap())),
-                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                        new HashSet<java.util.Map<String, String>>(Arrays.asList(routes.get(0).getGroupNameValues(),
                                                     routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/multi/maxmatch/foo");
     Assert.assertEquals(3, routes.size());
-    Assert.assertEquals(new HashSet<>(Arrays.asList("multi-max-match-id", "multi-max-match-*", "multi-max-match-foo")),
-                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination(),
-                                                    routes.get(2).getDestination())));
+    Assert.assertEquals(new HashSet<String>(Arrays.asList("multi-max-match-id", "multi-max-match-*",
+                                                    "multi-max-match-foo")),
+                        new HashSet<String>(Arrays.asList(routes.get(0).getDestination(),
+                                routes.get(1).getDestination(), routes.get(2).getDestination())));
 
-    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "foo"),
+    Assert.assertEquals(new HashSet<java.util.Map<String, String>>(Arrays.asList(Collections.singletonMap("id", "foo"),
                                                     Collections.<String, String>emptyMap())),
-                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                        new HashSet<java.util.Map<String, String>>(Arrays.asList(routes.get(0).getGroupNameValues(),
                                                     routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/foo/bar/wildcard/id1");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(new HashSet<>(Arrays.asList("wildcard-id", "slash-wildcard-id")),
-                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+    Assert.assertEquals(new HashSet<String>(Arrays.asList("wildcard-id", "slash-wildcard-id")),
+                        new HashSet<String>(Arrays.asList(routes.get(0).getDestination(),
+                                routes.get(1).getDestination())));
 
-    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+    Assert.assertEquals(new HashSet<java.util.Map<String, String>>(Arrays.asList(Collections.singletonMap("id", "id1"),
                                                     Collections.singletonMap("id", "id1"))),
-                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                        new HashSet<java.util.Map<String, String>>(Arrays.asList(routes.get(0).getGroupNameValues(),
                                                     routes.get(1).getGroupNameValues()))
     );
 
@@ -160,23 +164,25 @@ public class PathRouterTest {
 
     routes = pathRouter.getDestinations("/foo/bar/wildcard/bar/foo/id1");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(new HashSet<>(Arrays.asList("wildcard-foo-id", "slash-wildcard-foo-id")),
-                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+    Assert.assertEquals(new HashSet<String>(Arrays.asList("wildcard-foo-id", "slash-wildcard-foo-id")),
+                        new HashSet<String>(Arrays.asList(routes.get(0).getDestination(),
+                                routes.get(1).getDestination())));
 
-    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+    Assert.assertEquals(new HashSet<java.util.Map<String, String>>(Arrays.asList(Collections.singletonMap("id", "id1"),
                                                     Collections.singletonMap("id", "id1"))),
-                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                        new HashSet<java.util.Map<String, String>>(Arrays.asList(routes.get(0).getGroupNameValues(),
                                                     routes.get(1).getGroupNameValues()))
     );
 
     routes = pathRouter.getDestinations("/foo/bar/wildcard/bar/foo/id1/baz/bar");
     Assert.assertEquals(2, routes.size());
-    Assert.assertEquals(new HashSet<>(Arrays.asList("wildcard-foo-id-2", "slash-wildcard-foo-id-2")),
-                        new HashSet<>(Arrays.asList(routes.get(0).getDestination(), routes.get(1).getDestination())));
+    Assert.assertEquals(new HashSet<String>(Arrays.asList("wildcard-foo-id-2", "slash-wildcard-foo-id-2")),
+                        new HashSet<String>(Arrays.asList(routes.get(0).getDestination(),
+                                routes.get(1).getDestination())));
 
-    Assert.assertEquals(new HashSet<>(Arrays.asList(Collections.singletonMap("id", "id1"),
+    Assert.assertEquals(new HashSet<java.util.Map<String, String>>(Arrays.asList(Collections.singletonMap("id", "id1"),
                                                     Collections.singletonMap("id", "id1"))),
-                        new HashSet<>(Arrays.asList(routes.get(0).getGroupNameValues(),
+                        new HashSet<java.util.Map<String, String>>(Arrays.asList(routes.get(0).getGroupNameValues(),
                                                     routes.get(1).getGroupNameValues()))
     );
 

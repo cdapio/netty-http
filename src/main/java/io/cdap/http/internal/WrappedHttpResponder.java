@@ -80,7 +80,7 @@ final class WrappedHttpResponder extends AbstractHttpResponder {
   }
 
   @Override
-  public void sendFile(File file, HttpHeaders headers) throws IOException {
+  public void sendFile(File file, HttpHeaders headers) throws Throwable {
     delegate.sendFile(file, headers);
     runHook(HttpResponseStatus.OK);
   }

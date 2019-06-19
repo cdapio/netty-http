@@ -35,7 +35,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -51,7 +51,7 @@ public class URLRewriterTest {
   private static URI baseURI;
 
   @BeforeClass
-  public static void setup() throws Exception {
+  public static void setup() throws Throwable {
 
     NettyHttpService.Builder builder = NettyHttpService.builder("test-url-rewrite");
     builder.setHttpHandlers(new TestHandler());
@@ -66,7 +66,7 @@ public class URLRewriterTest {
   }
 
   @AfterClass
-  public static void teardown() throws Exception {
+  public static void teardown() throws Throwable {
     service.stop();
   }
 
@@ -162,6 +162,6 @@ public class URLRewriterTest {
     while (buffer.writeBytes(is, 1024) > 0) {
       // no-op
     }
-    return buffer.toString(StandardCharsets.UTF_8);
+    return buffer.toString(Charset.forName("UTF-8"));
   }
 }

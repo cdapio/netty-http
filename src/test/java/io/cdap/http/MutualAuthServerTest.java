@@ -21,8 +21,6 @@ import org.junit.BeforeClass;
 import java.io.File;
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 
 /**
  * Test the HttpsServer with mutual authentication.
@@ -30,17 +28,29 @@ import java.nio.file.StandardCopyOption;
 public class MutualAuthServerTest extends HttpsServerTest {
 
   @BeforeClass
-  public static void setup() throws Exception {
+  public static void setup() throws Throwable {
     NettyHttpService.Builder builder = createBaseNettyHttpServiceBuilder();
 
     File keyStore = tmpFolder.newFile();
-    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks")) {
-      Files.copy(is, keyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    InputStream is = null;
+    try {
+      is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks");
+      FileUtils.copy(is, keyStore.getPath());
+    } finally {
+      if (is != null) {
+        is.close();
+      }
     }
 
     File trustKeyStore = tmpFolder.newFile();
-    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("client.jks")) {
-      Files.copy(is, trustKeyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    is = null;
+    try {
+      is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("client.jks");
+      FileUtils.copy(is, trustKeyStore.getPath());
+    } finally {
+      if (is != null) {
+        is.close();
+      }
     }
 
     String keyStorePassword = "secret";

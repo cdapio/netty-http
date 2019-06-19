@@ -42,7 +42,7 @@ public final class PatternPathRouterWithGroups<T> {
   private final List<ImmutablePair<Pattern, RouteDestinationWithGroups>> patternRouteList;
 
   public static <T> PatternPathRouterWithGroups<T> create(int maxPathParts) {
-    return new PatternPathRouterWithGroups<>(maxPathParts);
+    return new PatternPathRouterWithGroups<T>(maxPathParts);
   }
 
   /**
@@ -50,7 +50,7 @@ public final class PatternPathRouterWithGroups<T> {
    */
   public PatternPathRouterWithGroups(int maxPathParts) {
     this.maxPathParts = maxPathParts;
-    this.patternRouteList = new ArrayList<>();
+    this.patternRouteList = new ArrayList<ImmutablePair<Pattern, RouteDestinationWithGroups>>();
   }
 
   /**
@@ -74,7 +74,7 @@ public final class PatternPathRouterWithGroups<T> {
                                                        source, maxPathParts));
     }
     StringBuilder sb =  new StringBuilder();
-    List<String> groupNames = new ArrayList<>();
+    List<String> groupNames = new ArrayList<String>();
 
     for (String part : parts) {
       Matcher groupMatcher = GROUP_PATTERN.matcher(part);
@@ -108,10 +108,10 @@ public final class PatternPathRouterWithGroups<T> {
     String cleanPath = (path.endsWith("/") && path.length() > 1)
       ? path.substring(0, path.length() - 1) : path;
 
-    List<RoutableDestination<T>> result = new ArrayList<>();
+    List<RoutableDestination<T>> result = new ArrayList<RoutableDestination<T>>();
 
     for (ImmutablePair<Pattern, RouteDestinationWithGroups> patternRoute : patternRouteList) {
-      Map<String, String> groupNameValuesBuilder = new HashMap<>();
+      Map<String, String> groupNameValuesBuilder = new HashMap<String, String>();
       Matcher matcher =  patternRoute.getFirst().matcher(cleanPath);
       if (matcher.matches()) {
         int matchIndex = 1;
@@ -120,7 +120,7 @@ public final class PatternPathRouterWithGroups<T> {
           groupNameValuesBuilder.put(name, value);
           matchIndex++;
         }
-        result.add(new RoutableDestination<>(patternRoute.getSecond().getDestination(), groupNameValuesBuilder));
+        result.add(new RoutableDestination<T>(patternRoute.getSecond().getDestination(), groupNameValuesBuilder));
       }
     }
     return result;

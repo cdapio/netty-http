@@ -57,7 +57,9 @@ public class SSLClientContext {
   }
 
   private static KeyStore getKeyStore(File keyStore, String keyStorePassword) throws IOException {
-    try (InputStream is = new FileInputStream(keyStore)) {
+    InputStream is = null;
+    try {
+      is = new FileInputStream(keyStore);
       KeyStore ks = KeyStore.getInstance("JKS");
       ks.load(is, keyStorePassword.toCharArray());
       return ks;
@@ -66,6 +68,10 @@ public class SSLClientContext {
         throw ((RuntimeException) ex);
       }
       throw new IOException(ex);
+    } finally {
+      if (is != null) {
+        is.close();
+      }
     }
   }
 

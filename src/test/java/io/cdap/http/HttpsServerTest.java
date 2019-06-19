@@ -30,8 +30,6 @@ import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URI;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import javax.annotation.Nullable;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
@@ -46,11 +44,17 @@ public class HttpsServerTest extends HttpServerTest {
   private static SSLClientContext sslClientContext;
 
   @BeforeClass
-  public static void setup() throws Exception {
+  public static void setup() throws Throwable {
     File keyStore = tmpFolder.newFile();
-
-    try (InputStream is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks")) {
-      Files.copy(is, keyStore.toPath(), StandardCopyOption.REPLACE_EXISTING);
+  
+    InputStream is = null;
+    try {
+      is = SSLKeyStoreTest.class.getClassLoader().getResourceAsStream("cert.jks");
+      FileUtils.copy(is, keyStore.getPath());
+    } finally {
+      if (is != null) {
+        is.close();
+      }
     }
 
     /* IMPORTANT

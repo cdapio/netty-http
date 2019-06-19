@@ -50,7 +50,7 @@ public final class ParamConvertUtils {
   private static final Map<Class<?>, Object> PRIMITIVE_DEFAULTS;
 
   static {
-    Map<Class<?>, Object> defaults = new IdentityHashMap<>();
+    Map<Class<?>, Object> defaults = new IdentityHashMap<Class<?>, Object>();
     defaults.put(Boolean.TYPE, false);
     defaults.put(Character.TYPE, '\0');
     defaults.put(Byte.TYPE, (byte) 0);
@@ -276,11 +276,11 @@ public final class ParamConvertUtils {
       public Object convert(List<String> values) throws Exception {
         Collection<? extends Comparable> collection;
         if (rawType == List.class) {
-          collection = new ArrayList<>();
+          collection = new ArrayList<Comparable>();
         } else if (rawType == Set.class) {
-          collection = new LinkedHashSet<>();
+          collection = new LinkedHashSet<Comparable>();
         } else {
-          collection = new TreeSet<>();
+          collection = new TreeSet<Comparable>();
         }
 
         for (String value : values) {

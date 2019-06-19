@@ -37,7 +37,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
@@ -170,7 +170,7 @@ public class TestHandler extends AbstractHttpHandler {
   }
 
   private String getStringContent(FullHttpRequest request) throws IOException {
-    return request.content().toString(StandardCharsets.UTF_8);
+    return request.content().toString(Charset.forName("UTF-8"));
   }
 
   @Path("/multi-match/**")
@@ -366,6 +366,7 @@ public class TestHandler extends AbstractHttpHandler {
           responder.sendFile(file);
         } catch (IOException e) {
           throw new RuntimeException(e);
+        } catch (Throwable e) {
         }
       }
 
@@ -399,6 +400,7 @@ public class TestHandler extends AbstractHttpHandler {
     while (content.isReadable()) {
       chunker.sendChunk(content.readBytes(1));
     }
+    content.release();
     chunker.close();
   }
 
@@ -415,7 +417,7 @@ public class TestHandler extends AbstractHttpHandler {
       @Override
       public ByteBuf nextChunk() {
         if (times < repeat) {
-          return Unpooled.wrappedBuffer(StandardCharsets.UTF_8.encode(chunk + " " + times++));
+          return Unpooled.wrappedBuffer(Charset.forName("UTF-8").encode(chunk + " " + times++));
         }
         return Unpooled.EMPTY_BUFFER;
       }
@@ -429,12 +431,18 @@ public class TestHandler extends AbstractHttpHandler {
 
       @Override
       public void handleError(@Nullable Throwable cause) {
-        try (PrintStream printer = new PrintStream(new FileOutputStream(new File(failureFile)), true)) {
+        PrintStream printer = null;
+        try {
+          printer = new PrintStream(new FileOutputStream(new File(failureFile)), true);
           if (cause != null) {
             cause.printStackTrace(printer);
           }
         } catch (FileNotFoundException e) {
           throw new RuntimeException(e);
+        } finally {
+          if (printer != null) {
+            printer.close();
+          }
         }
       }
     }, EmptyHttpHeaders.INSTANCE);
@@ -560,7 +568,7 @@ public class TestHandler extends AbstractHttpHandler {
       return;
     }
 
-    final ByteBuf content = Unpooled.copiedBuffer(message, StandardCharsets.UTF_8);
+    final ByteBuf content = Unpooled.copiedBuffer(message, Charset.forName("UTF-8"));
     if (!chunk) {
       responder.sendContent(HttpResponseStatus.OK, content, EmptyHttpHeaders.INSTANCE);
     } else {
