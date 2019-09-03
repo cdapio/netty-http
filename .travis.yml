@@ -14,9 +14,6 @@
 # the License.
 #
 
-# Run it on precise, until figure out how to make jdk7 works (or no longer needs to support jdk7).
-dist: precise
-
 language: java
 
 jdk:
@@ -27,3 +24,9 @@ branches:
     - develop
 
 script: mvn test -Dsurefire.redirectTestOutputToFile=false
+
+sudo: false
+
+cache:
+  directories:
+    - $HOME/.m2
