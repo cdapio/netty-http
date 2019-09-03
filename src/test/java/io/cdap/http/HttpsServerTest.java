@@ -68,14 +68,11 @@ public class HttpsServerTest extends HttpServerTest {
     sslClientContext = new SSLClientContext();
     service = builder.build();
     service.start();
-
-    int port = service.getBindAddress().getPort();
-    baseURI = URI.create(String.format("https://localhost:%d", port));
   }
 
   @Override
   protected HttpURLConnection request(String path, HttpMethod method, boolean keepAlive) throws IOException {
-    URL url = baseURI.resolve(path).toURL();
+    URL url = getBaseURI().resolve(path).toURL();
     HttpsURLConnection.setDefaultSSLSocketFactory(sslClientContext.getClientContext().getSocketFactory());
     HostnameVerifier allHostsValid = new HostnameVerifier() {
       @Override

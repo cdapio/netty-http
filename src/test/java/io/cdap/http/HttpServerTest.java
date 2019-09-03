@@ -110,7 +110,6 @@ public class HttpServerTest {
   };
 
   protected static NettyHttpService service;
-  protected static URI baseURI;
 
   protected static NettyHttpService.Builder createBaseNettyHttpServiceBuilder() {
     return NettyHttpService.builder("test")
@@ -132,8 +131,6 @@ public class HttpServerTest {
   public static void setup() throws Exception {
     service = createBaseNettyHttpServiceBuilder().build();
     service.start();
-    int port = service.getBindAddress().getPort();
-    baseURI = URI.create(String.format("http://localhost:%d", port));
   }
 
   @AfterClass
@@ -165,11 +162,16 @@ public class HttpServerTest {
     Assert.assertTrue("Some netty threads are still alive. Please see logs above", passed);
   }
 
+  protected final URI getBaseURI() {
+    return URI.create(String.format("%s://localhost:%d", service.isSSLEnabled() ? "https" : "http",
+                                    service.getBindAddress().getPort()));
+  }
+
   @Test
   public void testUploadDisconnect() throws Exception {
     File filePath = new File(tmpFolder.newFolder(), "test.txt");
 
-    URI uri = baseURI.resolve("/test/v1/stream/upload/file");
+    URI uri = getBaseURI().resolve("/test/v1/stream/upload/file");
     try (Socket socket = createRawSocket(uri.toURL())) {
 
       // Make a PUT call through socket, so that we can close it prematurely
@@ -378,7 +380,7 @@ public class HttpServerTest {
 
   @Test
   public void testKeepAlive() throws Exception {
-    final URL url = baseURI.resolve("/test/v1/tweets/1").toURL();
+    final URL url = getBaseURI().resolve("/test/v1/tweets/1").toURL();
 
     ThreadFactory threadFactory = new ThreadFactory() {
       private final AtomicInteger id = new AtomicInteger(0);
@@ -639,7 +641,7 @@ public class HttpServerTest {
 
   @Test (timeout = 5000)
   public void testConnectionClose() throws Exception {
-    URL url = baseURI.resolve("/test/v1/connectionClose").toURL();
+    URL url = getBaseURI().resolve("/test/v1/connectionClose").toURL();
 
     // Fire http request using raw socket so that we can verify the connection get closed by the server
     // after the response.
@@ -832,7 +834,7 @@ public class HttpServerTest {
   }
 
   protected HttpURLConnection request(String path, HttpMethod method, boolean keepAlive) throws IOException {
-    URL url = baseURI.resolve(path).toURL();
+    URL url = getBaseURI().resolve(path).toURL();
     HttpURLConnection urlConn = (HttpURLConnection) url.openConnection();
     if (method == HttpMethod.POST || method == HttpMethod.PUT) {
       urlConn.setDoOutput(true);
