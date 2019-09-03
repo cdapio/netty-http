@@ -20,7 +20,6 @@ import org.junit.BeforeClass;
 
 import java.io.File;
 import java.io.InputStream;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
@@ -52,8 +51,5 @@ public class MutualAuthServerTest extends HttpsServerTest {
     setSslClientContext(new SSLClientContext(trustKeyStore, trustKeyStorePassword));
     service = builder.build();
     service.start();
-
-    int port = service.getBindAddress().getPort();
-    baseURI = URI.create(String.format("https://localhost:%d", port));
   }
 }

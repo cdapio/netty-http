@@ -215,6 +215,13 @@ public final class NettyHttpService {
   }
 
   /**
+   * @return {@code true} if SSL is enabled for this service.
+   */
+  public boolean isSSLEnabled() {
+    return sslHandlerFactory != null;
+  }
+
+  /**
    * Stops the HTTP service gracefully and release all resources. Same as calling {@link #stop(long, long, TimeUnit)}
    * with {@code 0} second quiet period and {@code 5} seconds timeout.
    *
