@@ -19,7 +19,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.cdap.http</groupId>
   <artifactId>netty-http</artifactId>
-  <version>1.3.0</version>
+  <version>1.3.1</version>
   <packaging>bundle</packaging>
   <name>Netty based path router</name>
   <description>Netty based path router</description>
