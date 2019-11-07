@@ -16,12 +16,15 @@
 
 package io.cdap.http.internal;
 
+import io.cdap.http.AuthHandler;
 import io.cdap.http.BodyConsumer;
 import io.cdap.http.ExceptionHandler;
 import io.cdap.http.HandlerContext;
 import io.cdap.http.HandlerHook;
 import io.cdap.http.HttpHandler;
 import io.cdap.http.HttpResponder;
+import io.cdap.http.RequiredRoles;
+import io.cdap.http.Secured;
 import io.cdap.http.URLRewriter;
 import io.netty.handler.codec.http.FullHttpMessage;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -63,6 +66,7 @@ public final class HttpResourceHandler implements HttpHandler {
   private final Iterable<HttpHandler> handlers;
   private final Iterable<HandlerHook> handlerHooks;
   private final URLRewriter urlRewriter;
+  private final AuthHandler authHandler;
 
   /**
    * Construct HttpResourceHandler. Reads all annotations from all the handler classes and methods passed in, constructs
@@ -72,13 +76,15 @@ public final class HttpResourceHandler implements HttpHandler {
    * @param handlerHooks Iterable of HandlerHook.
    * @param urlRewriter URL re-writer.
    * @param exceptionHandler Exception handler
+   * @param authHandler Handler for authentication and authorization.
    */
   public HttpResourceHandler(Iterable<? extends HttpHandler> handlers, Iterable<? extends HandlerHook> handlerHooks,
-                             URLRewriter urlRewriter, ExceptionHandler exceptionHandler) {
+                             URLRewriter urlRewriter, ExceptionHandler exceptionHandler, AuthHandler authHandler) {
     //Store the handlers to call init and destroy on all handlers.
     this.handlers = copyOf(handlers);
     this.handlerHooks = copyOf(handlerHooks);
     this.urlRewriter = urlRewriter;
+    this.authHandler = authHandler;
 
     for (HttpHandler handler : handlers) {
       LOG.trace("Parsing handler {}", handler.getClass().getName());
@@ -110,9 +116,15 @@ public final class HttpResourceHandler implements HttpHandler {
           if (httpMethods.isEmpty()) {
             throw new IllegalArgumentException("No HttpMethod found for handler method " + method);
           }
+
+          boolean isSecured = method.isAnnotationPresent(Secured.class);
+          String[] requiredRoles = null;
+          if (method.getAnnotation(RequiredRoles.class) != null) {
+            requiredRoles = method.getAnnotation(RequiredRoles.class).value();
+          }
           try {
-            HttpResourceModel resourceModel = new HttpResourceModel(httpMethods, absolutePath, method,
-                                                                    handler, exceptionHandler);
+            HttpResourceModel resourceModel = new HttpResourceModel(httpMethods, absolutePath, method, handler,
+                                                                    exceptionHandler, isSecured, requiredRoles);
             LOG.trace("Adding resource model {}", resourceModel);
             patternRouter.add(absolutePath, resourceModel);
           } catch (Exception e) {
@@ -277,7 +289,22 @@ public final class HttpResourceHandler implements HttpHandler {
         if (!terminated) {
           // Wrap responder to make post hook calls.
           responder = new WrappedHttpResponder(responder, handlerHooks, request, info);
-          return httpResourceModel.handle(request, responder, matchedDestination.getGroupNameValues());
+          HttpMethodInfo methodInfo = httpResourceModel.handle(request, responder,
+                                                               matchedDestination.getGroupNameValues());
+          // check for authentication and authorization
+          if (authHandler != null) {
+            boolean shouldExecute = true;
+            if (methodInfo.isSecured()) {
+              shouldExecute = authHandler.isAuthenticated(request);
+            }
+            if (shouldExecute && methodInfo.getRequiredRoles() != null) {
+              shouldExecute = authHandler.hasRoles(request, methodInfo.getRequiredRoles());
+            }
+            if (!shouldExecute) {
+              throw new AuthHandlerException(authHandler.getWWWAuthenticateHeader());
+            }
+          }
+          return methodInfo;
         }
       } else if (routableDestinations.size() > 0)  {
         //Found a matching resource but could not find the right HttpMethod so return 405

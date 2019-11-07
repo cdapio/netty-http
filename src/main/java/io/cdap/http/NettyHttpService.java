@@ -112,6 +112,7 @@ public final class NettyHttpService {
    * @param pipelineModifier Function used to modify the pipeline.
    * @param sslHandlerFactory Object used to share SSL certificate details
    * @param exceptionHandler Handles exceptions from calling handler methods
+   * @param authHandler Handles authentication and authorization
    */
   private NettyHttpService(String serviceName,
                            InetSocketAddress bindAddress, int bossThreadPoolSize, int workerThreadPoolSize,
@@ -122,7 +123,8 @@ public final class NettyHttpService {
                            Iterable<? extends HttpHandler> httpHandlers,
                            Iterable<? extends HandlerHook> handlerHooks, int httpChunkLimit,
                            ChannelPipelineModifier pipelineModifier,
-                           SSLHandlerFactory sslHandlerFactory, ExceptionHandler exceptionHandler) {
+                           SSLHandlerFactory sslHandlerFactory, ExceptionHandler exceptionHandler,
+                           AuthHandler authHandler) {
     this.serviceName = serviceName;
     this.bindAddress = bindAddress;
     this.bossThreadPoolSize = bossThreadPoolSize;
@@ -132,7 +134,8 @@ public final class NettyHttpService {
     this.channelConfigs = new HashMap<>(channelConfigs);
     this.childChannelConfigs = new HashMap<>(childChannelConfigs);
     this.rejectedExecutionHandler = rejectedExecutionHandler;
-    this.resourceHandler = new HttpResourceHandler(httpHandlers, handlerHooks, urlRewriter, exceptionHandler);
+    this.resourceHandler = new HttpResourceHandler(httpHandlers, handlerHooks, urlRewriter, exceptionHandler,
+                                                   authHandler);
     this.handlerContext = new BasicHandlerContext(this.resourceHandler);
     this.httpChunkLimit = httpChunkLimit;
     this.pipelineModifier = pipelineModifier;
@@ -438,6 +441,7 @@ public final class NettyHttpService {
     private SSLHandlerFactory sslHandlerFactory;
     private ChannelPipelineModifier pipelineModifier;
     private ExceptionHandler exceptionHandler;
+    private AuthHandler authHandler = null;
 
     // Protected constructor to prevent instantiating Builder instance directly.
     protected Builder(String serviceName) {
@@ -454,6 +458,18 @@ public final class NettyHttpService {
       channelConfigs.put(ChannelOption.SO_BACKLOG, DEFAULT_CONNECTION_BACKLOG);
       sslHandlerFactory = null;
       exceptionHandler = new ExceptionHandler();
+    }
+
+    /**
+     * Add the {@link AuthHandler} that performs the checks for methods annotated by
+     * {@link Secured} and {@link RequiredRoles}.
+     *
+     * @param authHandler the handler to add
+     * @return instance of {@code Builder}.
+     */
+    public Builder setAuthHandler(AuthHandler authHandler) {
+      this.authHandler = authHandler;
+      return this;
     }
 
     /**
@@ -693,7 +709,7 @@ public final class NettyHttpService {
       return new NettyHttpService(serviceName, bindAddress, bossThreadPoolSize, workerThreadPoolSize,
                                   execThreadPoolSize, execThreadKeepAliveSecs, channelConfigs, childChannelConfigs,
                                   rejectedExecutionHandler, urlRewriter, handlers, handlerHooks, httpChunkLimit,
-                                  pipelineModifier, sslHandlerFactory, exceptionHandler);
+                                  pipelineModifier, sslHandlerFactory, exceptionHandler, authHandler);
     }
   }
 }

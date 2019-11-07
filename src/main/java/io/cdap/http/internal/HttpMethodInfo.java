@@ -50,17 +50,22 @@ class HttpMethodInfo {
   private final Object[] args;
   private final boolean isStreaming;
   private final ExceptionHandler exceptionHandler;
+  private final boolean isSecured;
+  private final String[] requiredRoles;
 
   private HttpRequest request;
   private BodyConsumer bodyConsumer;
 
   HttpMethodInfo(Method method, HttpHandler handler,
-                 HttpResponder responder, Object[] args, ExceptionHandler exceptionHandler) {
+                 HttpResponder responder, Object[] args, ExceptionHandler exceptionHandler,
+                 boolean isSecured, String[] requiredRoles) {
     this.method = method;
     this.handler = handler;
     this.isStreaming = BodyConsumer.class.isAssignableFrom(method.getReturnType());
     this.responder = responder;
     this.exceptionHandler = exceptionHandler;
+    this.isSecured = isSecured;
+    this.requiredRoles = requiredRoles;
 
     // The actual arguments list to invoke handler method
     this.args = new Object[args.length + 2];
@@ -188,5 +193,20 @@ class HttpMethodInfo {
    */
   boolean isStreaming() {
     return isStreaming;
+  }
+
+  /**
+   * Returns true if the method was annotated by {@link Secured}.
+   */
+  public boolean isSecured() {
+    return isSecured;
+  }
+
+  /**
+   * Returns the roles that required to execute this method as specified by {@link RequiredRoles}
+   * or <code>null</code> if none were specified.
+   */
+  public String[] getRequiredRoles() {
+    return requiredRoles;
   }
 }
