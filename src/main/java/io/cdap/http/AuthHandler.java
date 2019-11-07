@@ -43,7 +43,7 @@ public interface AuthHandler {
     /**
      * Returns the value for the <code>WWW-Authenticate</code> header field that will be
      * set for requests which were rejected by {@link #isAuthenticated(HttpRequest)}
-     * or {@link #hasRoles(HttpRequest, String...)}.
+     * or {@link #hasRoles(HttpRequest, String[])}.
      */
     public String getWWWAuthenticateHeader();
 }

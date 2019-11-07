@@ -211,6 +211,10 @@ public class HttpServerTest {
     Assert.assertEquals(401, urlConn.getResponseCode());
     urlConn.disconnect();
 
+    urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "mod");
+    Assert.assertEquals(401, urlConn.getResponseCode());
+    urlConn.disconnect();
+
     urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "admin");
     Assert.assertEquals(200, urlConn.getResponseCode());
     String result = getContent(urlConn);
@@ -221,6 +225,10 @@ public class HttpServerTest {
   @Test
   public void testAuthSecuredRoles() throws IOException {
     HttpURLConnection urlConn = request("/test/v1/auth/secured-roles", HttpMethod.GET);
+    Assert.assertEquals(401, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/secured-roles", HttpMethod.GET, "mod");
     Assert.assertEquals(401, urlConn.getResponseCode());
     urlConn.disconnect();
 
