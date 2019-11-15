@@ -126,7 +126,7 @@ public class HttpServerTest {
         public boolean hasRoles(HttpRequest request, String[] roles) {
           for (String role : roles) {
             if (request.headers().contains(HttpHeaderNames.AUTHORIZATION)) {
-              if (!request.headers().get(HttpHeaderNames.AUTHORIZATION.toString()).contains(role)) {
+              if (!request.headers().get(HttpHeaderNames.AUTHORIZATION).contains(role)) {
                 return false;
               }
             } else {
@@ -208,11 +208,11 @@ public class HttpServerTest {
   @Test
   public void testAuthRoles() throws IOException {
     HttpURLConnection urlConn = request("/test/v1/auth/roles", HttpMethod.GET);
-    Assert.assertEquals(401, urlConn.getResponseCode());
+    Assert.assertEquals(403, urlConn.getResponseCode());
     urlConn.disconnect();
 
     urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "mod");
-    Assert.assertEquals(401, urlConn.getResponseCode());
+    Assert.assertEquals(403, urlConn.getResponseCode());
     urlConn.disconnect();
 
     urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "admin");
@@ -229,7 +229,7 @@ public class HttpServerTest {
     urlConn.disconnect();
 
     urlConn = requestAuth("/test/v1/auth/secured-roles", HttpMethod.GET, "mod");
-    Assert.assertEquals(401, urlConn.getResponseCode());
+    Assert.assertEquals(403, urlConn.getResponseCode());
     urlConn.disconnect();
 
     urlConn = requestAuth("/test/v1/auth/secured-roles", HttpMethod.GET, "admin");

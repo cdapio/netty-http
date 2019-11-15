@@ -441,7 +441,7 @@ public final class NettyHttpService {
     private SSLHandlerFactory sslHandlerFactory;
     private ChannelPipelineModifier pipelineModifier;
     private ExceptionHandler exceptionHandler;
-    private AuthHandler authHandler = null;
+    private AuthHandler authHandler;
 
     // Protected constructor to prevent instantiating Builder instance directly.
     protected Builder(String serviceName) {

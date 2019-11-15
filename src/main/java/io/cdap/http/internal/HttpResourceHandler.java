@@ -293,15 +293,12 @@ public final class HttpResourceHandler implements HttpHandler {
                                                                matchedDestination.getGroupNameValues());
           // check for authentication and authorization
           if (authHandler != null) {
-            boolean shouldExecute = true;
-            if (methodInfo.isSecured()) {
-              shouldExecute = authHandler.isAuthenticated(request);
+            if (methodInfo.isSecured() && !authHandler.isAuthenticated(request)) {
+              throw new AuthenticationException(authHandler.getWWWAuthenticateHeader());
             }
-            if (shouldExecute && methodInfo.getRequiredRoles() != null) {
-              shouldExecute = authHandler.hasRoles(request, methodInfo.getRequiredRoles());
-            }
-            if (!shouldExecute) {
-              throw new AuthHandlerException(authHandler.getWWWAuthenticateHeader());
+            if (methodInfo.getRequiredRoles() != null &&
+                !authHandler.hasRoles(request, methodInfo.getRequiredRoles())) {
+              throw new AuthorizationException(authHandler.getWWWAuthenticateHeader());
             }
           }
           return methodInfo;

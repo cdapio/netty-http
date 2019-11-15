@@ -16,6 +16,7 @@
 
 package io.cdap.http;
 
+import io.netty.handler.codec.http.HttpRequest;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.Target;
@@ -25,11 +26,11 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 /**
  * Indicates that the annotated method should only be called if the requesting
  * {@link io.netty.handler.codec.http.HttpRequest} was deemed authorized by the
- * registered's {@link AuthHandler#hasRoles(String...)} method.
+ * registered's {@link AuthHandler#hasRoles(HttpRequest, String[])} method.
  */
 @Documented
 @Retention(RUNTIME)
 @Target(METHOD)
 public @interface RequiredRoles {
-    String[] value();
+  String[] value();
 }
