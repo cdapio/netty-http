@@ -298,7 +298,7 @@ public final class HttpResourceHandler implements HttpHandler {
             }
             if (methodInfo.getRequiredRoles() != null &&
                 !authHandler.hasRoles(request, methodInfo.getRequiredRoles())) {
-              throw new AuthorizationException(authHandler.getWWWAuthenticateHeader());
+              throw new AuthorizationException();
             }
           }
           return methodInfo;
