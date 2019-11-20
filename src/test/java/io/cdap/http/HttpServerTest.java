@@ -119,7 +119,7 @@ public class HttpServerTest {
       .setAuthHandler(new AuthHandler() {
         @Override
         public boolean isAuthenticated(HttpRequest request) {
-          return request.headers().contains(HttpHeaderNames.AUTHORIZATION.toString());
+          return request.headers().contains(HttpHeaderNames.AUTHORIZATION);
         }
 
         @Override
