@@ -116,6 +116,31 @@ public class HttpServerTest {
       .setHttpHandlers(new TestHandler())
       .setHttpChunkLimit(75 * 1024)
       .setExceptionHandler(EXCEPTION_HANDLER)
+      .setAuthHandler(new AuthHandler() {
+        @Override
+        public boolean isAuthenticated(HttpRequest request) {
+          return request.headers().contains(HttpHeaderNames.AUTHORIZATION);
+        }
+
+        @Override
+        public boolean hasRoles(HttpRequest request, String[] roles) {
+          for (String role : roles) {
+            if (request.headers().contains(HttpHeaderNames.AUTHORIZATION)) {
+              if (!request.headers().get(HttpHeaderNames.AUTHORIZATION).contains(role)) {
+                return false;
+              }
+            } else {
+              return false;
+            }
+          }
+          return true;
+        }
+
+        @Override
+        public String getWWWAuthenticateHeader() {
+          return "roles list";
+        }
+      })
       .setChannelPipelineModifier(new ChannelPipelineModifier() {
       @Override
       public void modify(ChannelPipeline pipeline) {
@@ -165,6 +190,53 @@ public class HttpServerTest {
   protected final URI getBaseURI() {
     return URI.create(String.format("%s://localhost:%d", service.isSSLEnabled() ? "https" : "http",
                                     service.getBindAddress().getPort()));
+  }
+
+  @Test
+  public void testAuthSecured() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/auth/secured", HttpMethod.GET);
+    Assert.assertEquals(401, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/secured", HttpMethod.GET, "");
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    String result = getContent(urlConn);
+    Assert.assertEquals("ALL GOOD", result);
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testAuthRoles() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/auth/roles", HttpMethod.GET);
+    Assert.assertEquals(403, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "mod");
+    Assert.assertEquals(403, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/roles", HttpMethod.GET, "admin");
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    String result = getContent(urlConn);
+    Assert.assertEquals("ALL GOOD", result);
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testAuthSecuredRoles() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/auth/secured-roles", HttpMethod.GET);
+    Assert.assertEquals(401, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/secured-roles", HttpMethod.GET, "mod");
+    Assert.assertEquals(403, urlConn.getResponseCode());
+    urlConn.disconnect();
+
+    urlConn = requestAuth("/test/v1/auth/secured-roles", HttpMethod.GET, "admin");
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    String result = getContent(urlConn);
+    Assert.assertEquals("ALL GOOD", result);
+    urlConn.disconnect();
   }
 
   @Test
@@ -831,6 +903,18 @@ public class HttpServerTest {
 
   protected Socket createRawSocket(URL url) throws IOException {
     return new Socket(url.getHost(), url.getPort());
+  }
+
+  protected HttpURLConnection requestAuth(String path, HttpMethod method, String role) throws IOException {
+    URL url = getBaseURI().resolve(path).toURL();
+    HttpURLConnection urlConn = (HttpURLConnection) url.openConnection();
+    if (method == HttpMethod.POST || method == HttpMethod.PUT) {
+      urlConn.setDoOutput(true);
+    }
+    urlConn.setRequestMethod(method.name());
+    urlConn.setRequestProperty(HttpHeaderNames.AUTHORIZATION.toString(), role);
+
+    return urlConn;
   }
 
   protected HttpURLConnection request(String path, HttpMethod method, boolean keepAlive) throws IOException {

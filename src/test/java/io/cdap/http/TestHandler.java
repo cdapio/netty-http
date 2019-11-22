@@ -61,6 +61,28 @@ public class TestHandler extends AbstractHttpHandler {
 
   private static final Gson GSON = new Gson();
 
+  @Path("auth/secured")
+  @GET
+  @Secured
+  public void testSecured(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "ALL GOOD");
+  }
+
+  @Path("auth/roles")
+  @GET
+  @RequiredRoles({"admin"})
+  public void testRoles(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "ALL GOOD");
+  }
+
+  @Path("auth/secured-roles")
+  @GET
+  @RequiredRoles({"admin"})
+  @Secured
+  public void testSecuredRoles(HttpRequest request, HttpResponder responder) {
+    responder.sendString(HttpResponseStatus.OK, "ALL GOOD");
+  }
+
   @Path("sleep/{seconds}")
   @GET
   public void testSleep(HttpRequest request, HttpResponder responder, @PathParam("seconds") int seconds) {

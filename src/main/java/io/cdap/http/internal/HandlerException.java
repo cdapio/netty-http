@@ -29,12 +29,12 @@ import java.nio.charset.StandardCharsets;
 /**
  *Creating Http Response for Exception messages.
  */
-final class HandlerException extends Exception {
+public class HandlerException extends Exception {
 
   private final HttpResponseStatus failureStatus;
   private final String message;
 
-  HandlerException(HttpResponseStatus failureStatus, String message) {
+  public HandlerException(HttpResponseStatus failureStatus, String message) {
     super(message);
     this.failureStatus = failureStatus;
     this.message = message;
@@ -46,10 +46,14 @@ final class HandlerException extends Exception {
     this.message = message;
   }
 
-  HttpResponse createFailureResponse() {
+  public HttpResponse createFailureResponse() {
     FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, failureStatus,
                                                             Unpooled.copiedBuffer(message, StandardCharsets.UTF_8));
     HttpUtil.setContentLength(response, response.content().readableBytes());
     return response;
+  }
+
+  public String getMessage() {
+    return message;
   }
 }

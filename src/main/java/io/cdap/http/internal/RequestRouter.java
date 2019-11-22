@@ -176,6 +176,7 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
   private boolean isUserError(HttpResponse response) {
     int code = response.status().code();
     return code == HttpResponseStatus.BAD_REQUEST.code() || code == HttpResponseStatus.NOT_FOUND.code() ||
-      code == HttpResponseStatus.METHOD_NOT_ALLOWED.code();
+      code == HttpResponseStatus.METHOD_NOT_ALLOWED.code() || code == HttpResponseStatus.UNAUTHORIZED.code()
+      || code == HttpResponseStatus.FORBIDDEN.code();
   }
 }
