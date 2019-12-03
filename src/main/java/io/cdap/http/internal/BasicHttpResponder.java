@@ -26,7 +26,9 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.FileRegion;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -51,6 +53,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
+import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -127,10 +130,21 @@ final class BasicHttpResponder extends AbstractHttpResponder {
         // The HttpChunkedInput will write out the last content
         channel.writeAndFlush(new HttpChunkedInput(new ChunkedFile(raf, 8192)));
       } else {
-        // The FileRegion will close the file channel when it is done sending.
-        FileRegion region = new DefaultFileRegion(raf.getChannel(), 0, file.length());
-        channel.write(region);
-        channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+        final Runnable completion = prepareSendFile(channel);
+        try {
+          // The FileRegion will close the file channel when it is done sending.
+          FileRegion region = new DefaultFileRegion(raf.getChannel(), 0, file.length());
+          channel.write(region);
+          channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) {
+              completion.run();
+            }
+          });
+        } catch (Throwable t) {
+          completion.run();
+          throw t;
+        }
       }
     } catch (Throwable t) {
       try {
@@ -225,6 +239,35 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   private void checkNotResponded() {
     if (!responded.compareAndSet(false, true)) {
       throw new IllegalStateException("Response has already been sent");
+    }
+  }
+
+  /**
+   * Prepares the given {@link Channel} for the sending file.
+   *
+   * @param channel the channel to prepare
+   * @return a {@link Runnable} that should be called when the send file is completed to revert the action
+   */
+  private Runnable prepareSendFile(Channel channel) {
+    // Remove the "compressor" from the pipeline to skip content encoding since FileRegion do zero-copy write,
+    // hence bypassing any user space data operation.
+    try {
+      final ChannelPipeline pipeline = channel.pipeline();
+      final ChannelHandler compressor = pipeline.remove("compressor");
+      return new Runnable() {
+        @Override
+        public void run() {
+          pipeline.addAfter("codec", "compressor", compressor);
+        }
+      };
+    } catch (NoSuchElementException e) {
+      // Ignore if there is no compressor
+      return new Runnable() {
+        @Override
+        public void run() {
+          // no-op
+        }
+      };
     }
   }
 

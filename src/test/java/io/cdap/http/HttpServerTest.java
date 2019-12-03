@@ -280,6 +280,10 @@ public class HttpServerTest {
   public void testSendFile() throws IOException {
     File filePath = new File(tmpFolder.newFolder(), "test.txt");
     HttpURLConnection urlConn = request("/test/v1/stream/file", HttpMethod.POST);
+    // Enable accepting compression. For HTTP case, the response won't be compressed since FileRegion is being used.
+    // For HTTPs, the response will be compressed.
+    // See https://github.com/cdapio/netty-http/issues/68
+    urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
     urlConn.setRequestProperty("File-Path", filePath.getAbsolutePath());
     urlConn.getOutputStream().write("content".getBytes(StandardCharsets.UTF_8));
     Assert.assertEquals(200, urlConn.getResponseCode());
@@ -845,7 +849,7 @@ public class HttpServerTest {
     urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
 
     Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
-    Assert.assertTrue(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()) != null);
+    Assert.assertNotNull(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()));
 
     Assert.assertEquals("Testing message", getContent(urlConn));
 
@@ -854,7 +858,7 @@ public class HttpServerTest {
     urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), HttpHeaderValues.GZIP_DEFLATE.toString());
 
     Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
-    Assert.assertTrue(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()) != null);
+    Assert.assertNotNull(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()));
 
     Assert.assertEquals("Testing message chunk", getContent(urlConn));
   }
