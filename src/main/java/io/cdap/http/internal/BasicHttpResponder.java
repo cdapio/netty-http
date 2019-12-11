@@ -36,6 +36,7 @@ import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpChunkedInput;
+import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -253,11 +254,11 @@ final class BasicHttpResponder extends AbstractHttpResponder {
     // hence bypassing any user space data operation.
     try {
       final ChannelPipeline pipeline = channel.pipeline();
-      final ChannelHandler compressor = pipeline.remove("compressor");
+      pipeline.remove("compressor");
       return new Runnable() {
         @Override
         public void run() {
-          pipeline.addAfter("codec", "compressor", compressor);
+          pipeline.addAfter("codec", "compressor", new HttpContentCompressor());
         }
       };
     } catch (NoSuchElementException e) {
