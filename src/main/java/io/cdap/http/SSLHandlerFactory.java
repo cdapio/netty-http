@@ -58,7 +58,8 @@ public class SSLHandlerFactory {
         tmf.init(tks);
         builder.trustManager(tmf);
       }
-
+      builder.sessionTimeout(sslConfig.getSessionTimeoutInSeconds());
+      builder.sessionCacheSize(sslConfig.getSessionCacheSize());
       this.sslContext = builder.build();
     } catch (Exception e) {
       throw new IllegalArgumentException("Failed to initialize the server-side SSLContext", e);
