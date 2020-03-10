@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2019 Cask Data, Inc.
+ * Copyright © 2014-2020 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -841,6 +841,14 @@ public class HttpServerTest {
     }
     Assert.assertTrue(successFile.isFile());
     Assert.assertFalse(failureFile.isFile());
+  }
+
+  @Test
+  public void testBodyProducerStatus() throws Exception {
+    for (int status : Arrays.asList(200, 400, 404, 500)) {
+      HttpURLConnection urlConn = request("/test/v1/produceBodyWithStatus?status=" + status, HttpMethod.GET);
+      Assert.assertEquals(status, urlConn.getResponseCode());
+    }
   }
 
   @Test
