@@ -1,5 +1,5 @@
 /*
- * Copyright © 2014-2019 Cask Data, Inc.
+ * Copyright © 2014-2020 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -458,6 +458,29 @@ public class TestHandler extends AbstractHttpHandler {
         } catch (FileNotFoundException e) {
           throw new RuntimeException(e);
         }
+      }
+    }, EmptyHttpHeaders.INSTANCE);
+  }
+
+  @Path("/produceBodyWithStatus")
+  @GET
+  public void produceBodyWithStatus(HttpRequest request, HttpResponder responder,
+                                    @QueryParam("status") @DefaultValue("200") final int status) {
+
+    responder.sendContent(HttpResponseStatus.valueOf(status), new BodyProducer() {
+      @Override
+      public ByteBuf nextChunk() {
+        return Unpooled.EMPTY_BUFFER;
+      }
+
+      @Override
+      public void finished() {
+        // no-op
+      }
+
+      @Override
+      public void handleError(@Nullable Throwable cause) {
+        // no-op
       }
     }, EmptyHttpHeaders.INSTANCE);
   }

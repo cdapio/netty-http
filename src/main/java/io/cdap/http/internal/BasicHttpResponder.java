@@ -1,5 +1,5 @@
 /*
- * Copyright © 2017-2019 Cask Data, Inc.
+ * Copyright © 2017-2020 Cask Data, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -26,7 +26,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.DefaultFileRegion;
@@ -174,7 +173,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
       return;
     }
 
-    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+    HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
     addContentTypeIfMissing(response.headers().add(headers), OCTET_STREAM_TYPE);
 
     if (contentLength < 0L) {
