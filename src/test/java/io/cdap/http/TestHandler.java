@@ -38,6 +38,7 @@ import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
@@ -422,6 +423,19 @@ public class TestHandler extends AbstractHttpHandler {
       chunker.sendChunk(content.readBytes(1));
     }
     chunker.close();
+  }
+
+  @Path("/largeChunk")
+  @GET
+  public void largeChunk(HttpRequest request, HttpResponder responder,
+                         @QueryParam("s") int chunkSize,
+                         @QueryParam("n") int count) throws IOException {
+    String msg = String.join("", Collections.nCopies(chunkSize, "0"));
+    try (ChunkResponder chunker = responder.sendChunkStart(HttpResponseStatus.OK)) {
+      for (int i = 0; i < count; i++) {
+        chunker.sendChunk(StandardCharsets.UTF_8.encode(msg));
+      }
+    }
   }
 
   @Path("/produceBody")

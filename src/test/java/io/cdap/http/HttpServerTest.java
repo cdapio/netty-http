@@ -651,6 +651,19 @@ public class HttpServerTest {
   }
 
   @Test
+  public void testLargeChunkResponse() throws IOException {
+    // Chunk limit for test is 75K, so we request for 150 chunks, each is 1K in length
+    HttpURLConnection urlConn = request("/test/v1/largeChunk?s=1024&n=150", HttpMethod.GET);
+    try {
+      String response = getContent(urlConn);
+      String expected = String.join("", Collections.nCopies(150 * 1024, "0"));
+      Assert.assertEquals(expected, response);
+    } finally {
+      urlConn.disconnect();
+    }
+  }
+
+  @Test
   public void testStringQueryParam() throws IOException {
     // First send without query, for String type, should get defaulted to null.
     testContent("/test/v1/stringQueryParam/mypath", "mypath:null", HttpMethod.GET);

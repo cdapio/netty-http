@@ -81,7 +81,7 @@ public class RequestRouter extends ChannelInboundHandlerAdapter {
         return;
       }
       HttpRequest request = (HttpRequest) msg;
-      BasicHttpResponder responder = new BasicHttpResponder(ctx.channel(), sslEnabled);
+      BasicHttpResponder responder = new BasicHttpResponder(ctx.channel(), sslEnabled, chunkMemoryLimit);
 
       // Reset the methodInfo for the incoming request error handling
       methodInfo = null;

@@ -67,11 +67,13 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   private final Channel channel;
   private final AtomicBoolean responded;
   private final boolean sslEnabled;
+  private final int chunkMemoryLimit;
 
-  BasicHttpResponder(Channel channel, boolean sslEnabled) {
+  BasicHttpResponder(Channel channel, boolean sslEnabled, int chunkMemoryLimit) {
     this.channel = channel;
     this.responded = new AtomicBoolean(false);
     this.sslEnabled = sslEnabled;
+    this.chunkMemoryLimit = chunkMemoryLimit;
   }
 
   @Override
@@ -90,7 +92,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
 
     checkNotResponded();
     channel.write(response);
-    return new ChannelChunkResponder(channel);
+    return new ChannelChunkResponder(channel, chunkMemoryLimit);
   }
 
   @Override

@@ -19,13 +19,14 @@ package io.cdap.http;
 import io.netty.buffer.ByteBuf;
 
 import java.io.Closeable;
+import java.io.Flushable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
  * A responder for sending chunk-encoded response
  */
-public interface ChunkResponder extends Closeable {
+public interface ChunkResponder extends Closeable, Flushable {
 
   /**
    * Adds a chunk of data to the response. The content will be sent to the client asynchronously.
@@ -42,6 +43,14 @@ public interface ChunkResponder extends Closeable {
    * @throws IOException if this {@link ChunkResponder} already closed or the connection is closed
    */
   void sendChunk(ByteBuf chunk) throws IOException;
+
+  /**
+   * Flushes all the chunks writen so far to the client asynchronously.
+   */
+  @Override
+  default void flush() {
+    // no-op
+  }
 
   /**
    * Closes this responder which signals the end of the chunk response.
