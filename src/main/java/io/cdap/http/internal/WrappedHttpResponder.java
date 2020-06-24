@@ -66,6 +66,11 @@ final class WrappedHttpResponder extends AbstractHttpResponder {
       }
 
       @Override
+      public void flush() {
+        chunkResponder.flush();
+      }
+
+      @Override
       public void close() throws IOException {
         chunkResponder.close();
         runHook(status);
