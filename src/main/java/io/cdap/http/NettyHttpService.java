@@ -17,8 +17,8 @@
 package io.cdap.http;
 
 import io.cdap.http.internal.BasicHandlerContext;
-import io.cdap.http.internal.ForwardingEventExecutor;
 import io.cdap.http.internal.ForwardingEventExecutorGroup;
+import io.cdap.http.internal.ForwardingOrderedEventExecutor;
 import io.cdap.http.internal.HttpDispatcher;
 import io.cdap.http.internal.HttpResourceHandler;
 import io.cdap.http.internal.NonStickyEventExecutorGroup;
@@ -43,6 +43,7 @@ import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.ImmediateEventExecutor;
+import io.netty.util.concurrent.OrderedEventExecutor;
 import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -344,7 +345,12 @@ public final class NettyHttpService {
       }
 
       private EventExecutor wrapEventExecutor(EventExecutor executor) {
-        return new ForwardingEventExecutor(executor) {
+        if (!(executor instanceof OrderedEventExecutor)) {
+          // This should never happen since we use the NonStickyEventExecutorGroup above.
+          throw new IllegalStateException("The executor is not an OrderedEventExecutor: " + executor.getClass());
+        }
+
+        return new ForwardingOrderedEventExecutor((OrderedEventExecutor) executor) {
 
           @Override
           public EventExecutorGroup parent() {

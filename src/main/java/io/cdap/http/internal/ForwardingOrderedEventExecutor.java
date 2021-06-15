@@ -19,6 +19,7 @@ package io.cdap.http.internal;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.OrderedEventExecutor;
 import io.netty.util.concurrent.ProgressivePromise;
 import io.netty.util.concurrent.Promise;
 import io.netty.util.concurrent.ScheduledFuture;
@@ -32,13 +33,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * A {@link EventExecutor} that forwards all methods to another {@link EventExecutor}.
+ * An {@link OrderedEventExecutor} that forwards all methods to another {@link OrderedEventExecutor}.
  */
-public class ForwardingEventExecutor implements EventExecutor {
+public class ForwardingOrderedEventExecutor implements OrderedEventExecutor {
 
-  private final EventExecutor delegate;
+  private final OrderedEventExecutor delegate;
 
-  public ForwardingEventExecutor(EventExecutor delegate) {
+  public ForwardingOrderedEventExecutor(OrderedEventExecutor delegate) {
     this.delegate = delegate;
   }
 
