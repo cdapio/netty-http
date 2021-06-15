@@ -17,6 +17,8 @@
 package io.cdap.http;
 
 import io.cdap.http.internal.BasicHandlerContext;
+import io.cdap.http.internal.ForwardingEventExecutorGroup;
+import io.cdap.http.internal.ForwardingOrderedEventExecutor;
 import io.cdap.http.internal.HttpDispatcher;
 import io.cdap.http.internal.HttpResourceHandler;
 import io.cdap.http.internal.NonStickyEventExecutorGroup;
@@ -37,9 +39,11 @@ import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.ImmediateEventExecutor;
+import io.netty.util.concurrent.OrderedEventExecutor;
 import io.netty.util.concurrent.UnorderedThreadPoolEventExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionHandler;
@@ -283,8 +288,9 @@ public final class NettyHttpService {
       return null;
     }
 
+    ThreadGroup threadGroup = new ThreadGroup(serviceName + "-executor-thread");
+
     ThreadFactory threadFactory = new ThreadFactory() {
-      private final ThreadGroup threadGroup = new ThreadGroup(serviceName + "-executor-thread");
       private final AtomicLong count = new AtomicLong(0);
 
       @Override
@@ -301,7 +307,68 @@ public final class NettyHttpService {
       executor.setKeepAliveTime(execThreadKeepAliveSecs, TimeUnit.SECONDS);
       executor.allowCoreThreadTimeOut(true);
     }
-    return new NonStickyEventExecutorGroup(executor);
+
+    // Returns a EventExecutorGroup that overrides the inEventLoop behavior of the EventExecutor returned by the group.
+    // The inEventLoop will return true if it is calling from a thread in the same thread group, hence was created
+    // from the same executor.
+    // This is to make sure channel events coming from a thread owned by the EventExecutor
+    // will be executed in the same thread instead of submitting a new task.
+    return new ForwardingEventExecutorGroup(new NonStickyEventExecutorGroup(executor)) {
+
+      private final EventExecutorGroup group = this;
+
+      @Override
+      public EventExecutor next() {
+        return wrapEventExecutor(super.next());
+      }
+
+      @Override
+      public Iterator<EventExecutor> iterator() {
+        Iterator<EventExecutor> iterator = super.iterator();
+
+        return new Iterator<EventExecutor>() {
+          @Override
+          public boolean hasNext() {
+            return iterator.hasNext();
+          }
+
+          @Override
+          public EventExecutor next() {
+            return wrapEventExecutor(iterator.next());
+          }
+
+          @Override
+          public void remove() {
+            iterator.remove();
+          }
+        };
+      }
+
+      private EventExecutor wrapEventExecutor(EventExecutor executor) {
+        if (!(executor instanceof OrderedEventExecutor)) {
+          // This should never happen since we use the NonStickyEventExecutorGroup above.
+          throw new IllegalStateException("The executor is not an OrderedEventExecutor: " + executor.getClass());
+        }
+
+        return new ForwardingOrderedEventExecutor((OrderedEventExecutor) executor) {
+
+          @Override
+          public EventExecutorGroup parent() {
+            return group;
+          }
+
+          @Override
+          public boolean inEventLoop() {
+            return inEventLoop(Thread.currentThread());
+          }
+
+          @Override
+          public boolean inEventLoop(Thread thread) {
+            return threadGroup == thread.getThreadGroup();
+          }
+        };
+      }
+    };
   }
 
   /**
