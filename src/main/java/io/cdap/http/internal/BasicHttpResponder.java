@@ -24,7 +24,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -137,12 +136,7 @@ final class BasicHttpResponder extends AbstractHttpResponder {
           // The FileRegion will close the file channel when it is done sending.
           FileRegion region = new DefaultFileRegion(raf.getChannel(), 0, file.length());
           channel.write(region);
-          channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) {
-              completion.run();
-            }
-          });
+          channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(future -> completion.run());
         } catch (Throwable t) {
           completion.run();
           throw t;
@@ -188,18 +182,14 @@ final class BasicHttpResponder extends AbstractHttpResponder {
     checkNotResponded();
 
     // Streams the data produced by the given BodyProducer
-    channel.writeAndFlush(response).addListener(new ChannelFutureListener() {
-
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        if (!future.isSuccess()) {
-          callBodyProducerHandleError(bodyProducer, future.cause());
-          channel.close();
-          return;
-        }
-        channel.writeAndFlush(new HttpChunkedInput(new BodyProducerChunkedInput(bodyProducer, contentLength)))
-          .addListener(createBodyProducerCompletionListener(bodyProducer));
+    channel.writeAndFlush(response).addListener(future -> {
+      if (!future.isSuccess()) {
+        callBodyProducerHandleError(bodyProducer, future.cause());
+        channel.close();
+        return;
       }
+      channel.writeAndFlush(new HttpChunkedInput(new BodyProducerChunkedInput(bodyProducer, contentLength)))
+        .addListener(createBodyProducerCompletionListener(bodyProducer));
     });
   }
 
@@ -211,21 +201,18 @@ final class BasicHttpResponder extends AbstractHttpResponder {
   }
 
   private ChannelFutureListener createBodyProducerCompletionListener(final BodyProducer bodyProducer) {
-    return new ChannelFutureListener() {
-      @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
-        if (!future.isSuccess()) {
-          callBodyProducerHandleError(bodyProducer, future.cause());
-          channel.close();
-          return;
-        }
+    return future -> {
+      if (!future.isSuccess()) {
+        callBodyProducerHandleError(bodyProducer, future.cause());
+        channel.close();
+        return;
+      }
 
-        try {
-          bodyProducer.finished();
-        } catch (Throwable t) {
-          callBodyProducerHandleError(bodyProducer, t);
-          channel.close();
-        }
+      try {
+        bodyProducer.finished();
+      } catch (Throwable t) {
+        callBodyProducerHandleError(bodyProducer, t);
+        channel.close();
       }
     };
   }
@@ -256,19 +243,11 @@ final class BasicHttpResponder extends AbstractHttpResponder {
     try {
       final ChannelPipeline pipeline = channel.pipeline();
       pipeline.remove("compressor");
-      return new Runnable() {
-        @Override
-        public void run() {
-          pipeline.addAfter("codec", "compressor", new HttpContentCompressor());
-        }
-      };
+      return () -> pipeline.addAfter("codec", "compressor", new HttpContentCompressor());
     } catch (NoSuchElementException e) {
       // Ignore if there is no compressor
-      return new Runnable() {
-        @Override
-        public void run() {
-          // no-op
-        }
+      return () -> {
+        // no-op
       };
     }
   }
@@ -299,9 +278,19 @@ final class BasicHttpResponder extends AbstractHttpResponder {
       }
 
       completed = !nextChunk.isReadable();
-      if (completed && length >= 0 && bytesProduced != length) {
-        throw new IllegalStateException("Body size doesn't match with content length. " +
-                                          "Content-Length: " + length + ", bytes produced: " + bytesProduced);
+      if (completed) {
+        try {
+          if (length >= 0 && bytesProduced != length) {
+            throw new IllegalStateException("Body size doesn't match with content length. " +
+                                              "Content-Length: " + length + ", bytes produced: " + bytesProduced);
+          }
+        } finally {
+          // We should release the buffer if it is completed since this will be the last place that uses the buffer,
+          // as the buffer won't be returned by the readChunk method.
+          // Also, the buffer won't get double released since this method entrance is protected by the `completed`
+          // field.
+          nextChunk.release();
+        }
       }
 
       return completed;
