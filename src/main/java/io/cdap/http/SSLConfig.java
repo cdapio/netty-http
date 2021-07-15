@@ -27,14 +27,19 @@ public class SSLConfig {
   private final String certificatePassword;
   private final File trustKeyStore;
   private final String trustKeyStorePassword;
+  private final long sessionTimeoutInSeconds;
+  private final long sessionCacheSize;
 
   private SSLConfig(File keyStore, String keyStorePassword,
-                    String certificatePassword, File trustKeyStore, String trustKeyStorePassword) {
+                    String certificatePassword, File trustKeyStore, String trustKeyStorePassword,
+                    long sessionCacheSize, long sessionTimeoutInSeconds) {
     this.keyStore = keyStore;
     this.keyStorePassword = keyStorePassword;
     this.certificatePassword = certificatePassword;
     this.trustKeyStore = trustKeyStore;
     this.trustKeyStorePassword = trustKeyStorePassword;
+    this.sessionCacheSize = sessionCacheSize;
+    this.sessionTimeoutInSeconds = sessionTimeoutInSeconds;
   }
 
   /**
@@ -73,6 +78,20 @@ public class SSLConfig {
   }
 
   /**
+   * @return size of cache used for storing SSL session objects.
+   */
+  public long getSessionCacheSize() {
+    return sessionCacheSize;
+  }
+
+  /**
+   * @return timeout for the cached SSL session objects, in seconds.
+   */
+  public long getSessionTimeoutInSeconds() {
+    return sessionTimeoutInSeconds;
+  }
+
+  /**
    * Creates a builder for the SSLConfig.
    *
    * @param keyStore the keystore
@@ -92,10 +111,14 @@ public class SSLConfig {
     private String certificatePassword;
     private File trustKeyStore;
     private String trustKeyStorePassword;
+    private long sessionTimeoutInSeconds;
+    private long sessionCacheSize;
 
     private Builder(File keyStore, String keyStorePassword) {
       this.keyStore = keyStore;
       this.keyStorePassword = keyStorePassword;
+      this.sessionCacheSize = 10000L;
+      this.sessionTimeoutInSeconds = 60L;
     }
 
     /**
@@ -117,6 +140,28 @@ public class SSLConfig {
      */
     public Builder setTrustKeyStore(File trustKeyStore) {
       this.trustKeyStore = trustKeyStore;
+      return this;
+    }
+
+    /**
+     * Set the SSL session object timeout in seconds.
+     *
+     * @param sessionTimeoutInSeconds time in seconds.
+     * @return an instance of {@code Builder}.
+     */
+    public Builder setSessionTimeoutInSecond(long sessionTimeoutInSeconds) {
+      this.sessionTimeoutInSeconds = sessionTimeoutInSeconds;
+      return this;
+    }
+
+    /**
+     * Set the SSL session object cache.
+     *
+     * @param sessionCacheSize size of SSL session object to be cached.
+     * @return an instance of {@code Builder}.
+     */
+    public Builder setSessionCacheSize(long sessionCacheSize) {
+      this.sessionCacheSize = sessionCacheSize;
       return this;
     }
 
@@ -144,7 +189,8 @@ public class SSLConfig {
       if (keyStorePassword == null) {
         throw new IllegalArgumentException("KeyStore Password Not Configured");
       }
-      return new SSLConfig(keyStore, keyStorePassword, certificatePassword, trustKeyStore, trustKeyStorePassword);
+      return new SSLConfig(keyStore, keyStorePassword, certificatePassword, trustKeyStore, trustKeyStorePassword,
+              sessionCacheSize, sessionTimeoutInSeconds);
     }
   }
 }
