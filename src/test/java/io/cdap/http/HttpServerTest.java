@@ -43,6 +43,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
+import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.handler.ssl.SslHandler;
@@ -703,51 +704,31 @@ public class HttpServerTest {
 
   @Test
   public void testStringCookieParam() throws IOException {
-    String cookie = ClientCookieEncoder.LAX.encode("ck1", "cookie value");
-    HttpURLConnection urlConn = request("/test/v1/stringCookieParam", HttpMethod.GET);
-    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
-    Assert.assertEquals(200, urlConn.getResponseCode());
-    Assert.assertEquals("ck1:cookie value", getContent(urlConn));
-    urlConn.disconnect();
+    testContent("/test/v1/stringCookieParam", "ck1:cookie value",
+        new DefaultCookie("ck1", "cookie value"));
   }
 
   @Test
   public void testStringCookieParamDefaultValue() throws IOException {
-    HttpURLConnection urlConn = request("/test/v1/stringCookieParam", HttpMethod.GET);
-    Assert.assertEquals(200, urlConn.getResponseCode());
-    Assert.assertEquals("ck1:def", getContent(urlConn));
-    urlConn.disconnect();
+    testContent("/test/v1/stringCookieParam", "ck1:def", new Cookie[0]);
   }
 
   @Test
   public void testMultipleStringCookieParam() throws IOException {
-    String cookie = ClientCookieEncoder.LAX.encode(
+    testContent("/test/v1/multipleStringCookieParam", "ck1:cookie value 1,ck2:cookie value 2",
         new DefaultCookie("ck1", "cookie value 1"),
-        new DefaultCookie("ck2", "cookie value 2")
-    );
-    HttpURLConnection urlConn = request("/test/v1/multipleStringCookieParam", HttpMethod.GET);
-    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
-    Assert.assertEquals(200, urlConn.getResponseCode());
-    Assert.assertEquals("ck1:cookie value 1,ck2:cookie value 2", getContent(urlConn));
-    urlConn.disconnect();
+        new DefaultCookie("ck2", "cookie value 2"));
   }
 
   @Test
   public void testNettyCookieCookieParam() throws IOException {
-    String cookie = ClientCookieEncoder.LAX.encode("ck1", "cookie value");
-    HttpURLConnection urlConn = request("/test/v1/nettyCookieParam", HttpMethod.GET);
-    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
-    Assert.assertEquals(200, urlConn.getResponseCode());
-    Assert.assertEquals("ck1:cookie value", getContent(urlConn));
-    urlConn.disconnect();
+    testContent("/test/v1/nettyCookieParam", "ck1:cookie value",
+        new DefaultCookie("ck1", "cookie value"));
   }
 
   @Test
   public void testNettyCookieParamDefaultValue() throws IOException {
-    HttpURLConnection urlConn = request("/test/v1/nettyCookieParam", HttpMethod.GET);
-    Assert.assertEquals(200, urlConn.getResponseCode());
-    Assert.assertEquals("ck1:def", getContent(urlConn));
-    urlConn.disconnect();
+    testContent("/test/v1/nettyCookieParam", "ck1:def", new Cookie[0]);
   }
 
   @Test
@@ -1020,6 +1001,15 @@ public class HttpServerTest {
 
   private void testContent(String path, String content, HttpMethod method) throws IOException {
     HttpURLConnection urlConn = request(path, method);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals(content, getContent(urlConn));
+    urlConn.disconnect();
+  }
+
+  private void testContent(String path, String content, Cookie... cookies) throws IOException {
+    String cookie = ClientCookieEncoder.LAX.encode(cookies);
+    HttpURLConnection urlConn = request(path, HttpMethod.GET);
+    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
     Assert.assertEquals(200, urlConn.getResponseCode());
     Assert.assertEquals(content, getContent(urlConn));
     urlConn.disconnect();
