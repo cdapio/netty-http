@@ -85,6 +85,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.DeflaterInputStream;
 import java.util.zip.GZIPInputStream;
 import javax.annotation.Nullable;
+import javax.ws.rs.ext.RuntimeDelegate;
 
 /**
  * Test the HttpServer.
@@ -728,6 +729,24 @@ public class HttpServerTest {
     urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
     Assert.assertEquals(200, urlConn.getResponseCode());
     Assert.assertEquals("ck1:cookie value 1,ck2:cookie value 2", getContent(urlConn));
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testNettyCookieCookieParam() throws IOException {
+    String cookie = ClientCookieEncoder.LAX.encode("ck1", "cookie value");
+    HttpURLConnection urlConn = request("/test/v1/nettyCookieParam", HttpMethod.GET);
+    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals("ck1:cookie value", getContent(urlConn));
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testNettyCookieParamDefaultValue() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/nettyCookieParam", HttpMethod.GET);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals("ck1:def", getContent(urlConn));
     urlConn.disconnect();
   }
 

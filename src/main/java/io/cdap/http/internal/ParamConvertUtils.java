@@ -107,6 +107,17 @@ public final class ParamConvertUtils {
         }
       };
     }
+    // For cookie objects, convert appropriately.
+    if (resultClass == Cookie.class) {
+      return new Converter<Cookie, Object>() {
+        @Nullable
+        @Override
+        public Object convert(Cookie from) throws Exception {
+          return from;
+        }
+      };
+    }
+
     throw new IllegalArgumentException("Unsupported CookieParam type " + resultType);
   }
 
