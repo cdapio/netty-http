@@ -533,7 +533,8 @@ public class TestHandler extends AbstractHttpHandler {
 
   @Path("/stringCookieParam")
   @GET
-  public void stringCookieParam(HttpRequest request, HttpResponder responder, @CookieParam("ck1") String ck1) {
+  public void stringCookieParam(HttpRequest request, HttpResponder responder,
+                                @CookieParam("ck1") @DefaultValue("def") String ck1) {
     responder.sendString(HttpResponseStatus.OK, "ck1:" + ck1);
   }
 

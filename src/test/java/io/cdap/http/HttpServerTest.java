@@ -711,6 +711,14 @@ public class HttpServerTest {
   }
 
   @Test
+  public void testStringCookieParamDefaultValue() throws IOException {
+    HttpURLConnection urlConn = request("/test/v1/stringCookieParam", HttpMethod.GET);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals("ck1:def", getContent(urlConn));
+    urlConn.disconnect();
+  }
+
+  @Test
   public void testMultipleStringCookieParam() throws IOException {
     String cookie = ClientCookieEncoder.LAX.encode(
         new DefaultCookie("ck1", "cookie value 1"),

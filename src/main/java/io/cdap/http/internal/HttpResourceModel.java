@@ -24,6 +24,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.cookie.Cookie;
+import io.netty.handler.codec.http.cookie.DefaultCookie;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -211,8 +212,7 @@ public final class HttpResourceModel {
     CookieParam cookieParam = info.getAnnotation();
     String cookieName = cookieParam.value();
     boolean hasCookie = cookies.containsKey(cookieName);
-//    return hasCookie ? info.convert(cookies.get(cookieName)) : info.convert(defaultValue(annotations));
-    return hasCookie ? info.convert(cookies.get(cookieName)) : null;
+    return hasCookie ? info.convert(cookies.get(cookieName)) : info.convert(defaultCookie(cookieName, annotations));
   }
 
   /**
@@ -228,6 +228,19 @@ public final class HttpResourceModel {
 
     DefaultValue defaultValue = defaultInfo.getAnnotation();
     return Collections.singletonList(defaultValue.value());
+  }
+
+  /**
+   * Returns a Cookie created based on the {@link DefaultValue} if it is presented in the annotations Map.
+   *
+   * @return a Cookie or null if {@link DefaultValue} is not presented
+   */
+  private Cookie defaultCookie(String name, Map<Class<? extends Annotation>, ParameterInfo<?>> annotations) {
+    List<String> strings = defaultValue(annotations);
+    if (strings == null || strings.isEmpty()) {
+      return null;
+    }
+    return new DefaultCookie(name, strings.get(0));
   }
 
   /**
