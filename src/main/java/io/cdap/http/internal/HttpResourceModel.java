@@ -23,6 +23,7 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.cookie.Cookie;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -36,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
+import javax.ws.rs.CookieParam;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.PathParam;
@@ -48,7 +50,8 @@ import javax.ws.rs.QueryParam;
 public final class HttpResourceModel {
 
   private static final Set<Class<? extends Annotation>> SUPPORTED_PARAM_ANNOTATIONS =
-    Collections.unmodifiableSet(new HashSet<>(Arrays.asList(PathParam.class, QueryParam.class, HeaderParam.class)));
+    Collections.unmodifiableSet(new HashSet<>(Arrays.asList(PathParam.class, QueryParam.class, HeaderParam.class,
+        CookieParam.class)));
 
   private final Set<HttpMethod> httpMethods;
   private final String path;
@@ -58,6 +61,7 @@ public final class HttpResourceModel {
   private final ExceptionHandler exceptionHandler;
   private final boolean isSecured;
   private final String[] requiredRoles;
+  private final CookieParser cookieParser = new CookieParser(false);
 
   /**
    * Construct a resource model with HttpMethod, method that handles httprequest, Object that contains the method.
@@ -125,6 +129,8 @@ public final class HttpResourceModel {
       if (httpMethods.contains(request.method())) {
         //Setup args for reflection call
         Object [] args = new Object[paramsInfo.size()];
+        // Parse cookies
+        Map<String, Cookie> cookies = cookieParser.parseCookies(request);
 
         int idx = 0;
         for (Map<Class<? extends Annotation>, ParameterInfo<?>> info : paramsInfo) {
@@ -136,6 +142,9 @@ public final class HttpResourceModel {
           }
           if (info.containsKey(HeaderParam.class)) {
             args[idx] = getHeaderParamValue(info, request);
+          }
+          if (info.containsKey(CookieParam.class)) {
+            args[idx] = getCookieParamValue(info, request, cookies);
           }
           idx++;
         }
@@ -195,6 +204,17 @@ public final class HttpResourceModel {
     return hasHeader ? info.convert(request.headers().getAll(headerName)) : info.convert(defaultValue(annotations));
   }
 
+  @SuppressWarnings("unchecked")
+  private Object getCookieParamValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations,
+                                     HttpRequest request, Map<String, Cookie> cookies) throws Exception {
+    ParameterInfo<Cookie> info = (ParameterInfo<Cookie>) annotations.get(CookieParam.class);
+    CookieParam cookieParam = info.getAnnotation();
+    String cookieName = cookieParam.value();
+    boolean hasCookie = cookies.containsKey(cookieName);
+//    return hasCookie ? info.convert(cookies.get(cookieName)) : info.convert(defaultValue(annotations));
+    return hasCookie ? info.convert(cookies.get(cookieName)) : null;
+  }
+
   /**
    * Returns a List of String created based on the {@link DefaultValue} if it is presented in the annotations Map.
    *
@@ -239,6 +259,9 @@ public final class HttpResourceModel {
         } else if (HeaderParam.class.isAssignableFrom(annotationType)) {
           parameterInfo = ParameterInfo.create(annotation,
                                                ParamConvertUtils.createHeaderParamConverter(parameterTypes[i]));
+        } else if (CookieParam.class.isAssignableFrom(annotationType)) {
+          parameterInfo = ParameterInfo.create(annotation,
+                                               ParamConvertUtils.createCookieParamConverter(parameterTypes[i]));
         } else {
           parameterInfo = ParameterInfo.create(annotation, null);
         }

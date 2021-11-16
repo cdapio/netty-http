@@ -16,6 +16,7 @@
 
 package io.cdap.http.internal;
 
+import io.netty.handler.codec.http.cookie.Cookie;
 import org.apache.commons.beanutils.ConvertUtils;
 
 import java.lang.reflect.Array;
@@ -87,6 +88,26 @@ public final class ParamConvertUtils {
    */
   public static Converter<List<String>, Object> createHeaderParamConverter(Type resultType) {
     return createListConverter(resultType);
+  }
+
+  /**
+   * Creates a converter function that converts cookie value into an object of the given result type.
+   * Currently, only {@link String} result types are supported.
+   */
+  public static Converter<Cookie, Object> createCookieParamConverter(Type resultType) {
+    Class<?> resultClass = getRawClass(resultType);
+
+    // For string, return the cookie value
+    if (resultClass == String.class) {
+      return new Converter<Cookie, Object>() {
+        @Nullable
+        @Override
+        public Object convert(Cookie from) throws Exception {
+          return from.value();
+        }
+      };
+    }
+    throw new IllegalArgumentException("Unsupported CookieParam type " + resultType);
   }
 
   /**

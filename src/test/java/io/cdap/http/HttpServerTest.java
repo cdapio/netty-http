@@ -42,6 +42,9 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
+import io.netty.handler.codec.http.cookie.DefaultCookie;
+import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ResourceLeakDetector;
@@ -542,7 +545,7 @@ public class HttpServerTest {
 
   //Test the end point where the parameter in path and order of declaration in method signature are different
   @Test
-  public void testMultiplePathParametersWithParamterInDifferentOrder() throws IOException {
+  public void testMultiplePathParametersWithParameterInDifferentOrder() throws IOException {
     HttpURLConnection urlConn = request("/test/v1/message/21/user/sree", HttpMethod.GET);
     Assert.assertEquals(200, urlConn.getResponseCode());
 
@@ -695,6 +698,29 @@ public class HttpServerTest {
     testContent("/test/v1/sortedSetQueryParam?id=30&id=10&id=20&id=30", expectedContent, HttpMethod.GET);
     testContent("/test/v1/sortedSetQueryParam?id=10&id=30&id=20&id=20", expectedContent, HttpMethod.GET);
     testContent("/test/v1/sortedSetQueryParam?id=20&id=30&id=20&id=10", expectedContent, HttpMethod.GET);
+  }
+
+  @Test
+  public void testStringCookieParam() throws IOException {
+    String cookie = ClientCookieEncoder.LAX.encode("ck1", "cookie value");
+    HttpURLConnection urlConn = request("/test/v1/stringCookieParam", HttpMethod.GET);
+    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals("ck1:cookie value", getContent(urlConn));
+    urlConn.disconnect();
+  }
+
+  @Test
+  public void testMultipleStringCookieParam() throws IOException {
+    String cookie = ClientCookieEncoder.LAX.encode(
+        new DefaultCookie("ck1", "cookie value 1"),
+        new DefaultCookie("ck2", "cookie value 2")
+    );
+    HttpURLConnection urlConn = request("/test/v1/multipleStringCookieParam", HttpMethod.GET);
+    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals("ck1:cookie value 1,ck2:cookie value 2", getContent(urlConn));
+    urlConn.disconnect();
   }
 
   @Test
