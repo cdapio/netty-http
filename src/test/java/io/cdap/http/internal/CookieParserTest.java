@@ -20,6 +20,8 @@ import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
@@ -30,9 +32,6 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-
-import static io.netty.handler.codec.http.HttpMethod.GET;
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 
 public class CookieParserTest {
@@ -47,7 +46,7 @@ public class CookieParserTest {
     String cookieHeader = ClientCookieEncoder.LAX.encode(cookies);
     HttpHeaders headers = new DefaultHttpHeaders()
         .set(HttpHeaderNames.COOKIE, cookieHeader);
-    DefaultHttpRequest request = new DefaultHttpRequest(HTTP_1_1, GET, "test", headers);
+    DefaultHttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "test", headers);
     Map<String, Cookie> parsed = cookieParser.parseCookies(request);
     Assert.assertEquals(new HashSet<>(Arrays.asList("c1", "c2")), parsed.keySet());
     Assert.assertEquals(new HashSet<>(cookies), new HashSet<>(parsed.values()));

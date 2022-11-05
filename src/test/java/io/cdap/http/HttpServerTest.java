@@ -705,7 +705,7 @@ public class HttpServerTest {
   @Test
   public void testStringCookieParam() throws IOException {
     testContent("/test/v1/stringCookieParam", "ck1:cookie value",
-        new DefaultCookie("ck1", "cookie value"));
+                new DefaultCookie("ck1", "cookie value"));
   }
 
   @Test
@@ -716,14 +716,14 @@ public class HttpServerTest {
   @Test
   public void testMultipleStringCookieParam() throws IOException {
     testContent("/test/v1/multipleStringCookieParam", "ck1:cookie value 1,ck2:cookie value 2",
-        new DefaultCookie("ck1", "cookie value 1"),
-        new DefaultCookie("ck2", "cookie value 2"));
+                new DefaultCookie("ck1", "cookie value 1"),
+                new DefaultCookie("ck2", "cookie value 2"));
   }
 
   @Test
   public void testNettyCookieCookieParam() throws IOException {
     testContent("/test/v1/nettyCookieParam", "ck1:cookie value",
-        new DefaultCookie("ck1", "cookie value"));
+                new DefaultCookie("ck1", "cookie value"));
   }
 
   @Test

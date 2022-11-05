@@ -536,21 +536,21 @@ public class TestHandler extends AbstractHttpHandler {
   @Path("/stringCookieParam")
   @GET
   public void testStringCookieParam(HttpRequest request, HttpResponder responder,
-                                @CookieParam("ck1") @DefaultValue("def") String ck1) {
+                                    @CookieParam("ck1") @DefaultValue("def") String ck1) {
     responder.sendString(HttpResponseStatus.OK, "ck1:" + ck1);
   }
 
   @Path("/multipleStringCookieParam")
   @GET
   public void testMultipleStringCookieParam(HttpRequest request, HttpResponder responder,
-      @CookieParam("ck1") String ck1, @CookieParam("ck2") String ck2) {
+                                            @CookieParam("ck1") String ck1, @CookieParam("ck2") String ck2) {
     responder.sendString(HttpResponseStatus.OK, "ck1:" + ck1 + ",ck2:" + ck2);
   }
 
   @Path("/nettyCookieParam")
   @GET
   public void testNettyCookieParam(HttpRequest request, HttpResponder responder,
-      @CookieParam("ck1") @DefaultValue("def") Cookie ck1) {
+                                   @CookieParam("ck1") @DefaultValue("def") Cookie ck1) {
     responder.sendString(HttpResponseStatus.OK, "ck1:" + ck1.value());
   }
 
