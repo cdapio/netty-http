@@ -52,7 +52,7 @@ public final class HttpResourceModel {
 
   private static final Set<Class<? extends Annotation>> SUPPORTED_PARAM_ANNOTATIONS =
     Collections.unmodifiableSet(new HashSet<>(Arrays.asList(PathParam.class, QueryParam.class, HeaderParam.class,
-        CookieParam.class)));
+                                CookieParam.class)));
 
   private final Set<HttpMethod> httpMethods;
   private final String path;
@@ -130,8 +130,6 @@ public final class HttpResourceModel {
       if (httpMethods.contains(request.method())) {
         //Setup args for reflection call
         Object [] args = new Object[paramsInfo.size()];
-        // Parse cookies
-        Map<String, Cookie> cookies = cookieParser.parseCookies(request);
 
         int idx = 0;
         for (Map<Class<? extends Annotation>, ParameterInfo<?>> info : paramsInfo) {
@@ -145,7 +143,7 @@ public final class HttpResourceModel {
             args[idx] = getHeaderParamValue(info, request);
           }
           if (info.containsKey(CookieParam.class)) {
-            args[idx] = getCookieParamValue(info, request, cookies);
+            args[idx] = getCookieParamValue(info, request);
           }
           idx++;
         }
@@ -207,14 +205,14 @@ public final class HttpResourceModel {
 
   @SuppressWarnings("unchecked")
   private Object getCookieParamValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations,
-                                     HttpRequest request, Map<String, Cookie> cookies) throws Exception {
+                                     HttpRequest request) throws Exception {
+    Map<String, Cookie> cookies = cookieParser.parseCookies(request);
     ParameterInfo<Cookie> info = (ParameterInfo<Cookie>) annotations.get(CookieParam.class);
     CookieParam cookieParam = info.getAnnotation();
     String cookieName = cookieParam.value();
     boolean hasCookie = cookies.containsKey(cookieName);
     return hasCookie ? info.convert(cookies.get(cookieName)) : info.convert(defaultCookie(cookieName, annotations));
   }
-
   /**
    * Returns a List of String created based on the {@link DefaultValue} if it is presented in the annotations Map.
    *
