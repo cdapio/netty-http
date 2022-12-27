@@ -169,6 +169,7 @@
               <excludes>
                 <exclude>LICENSE</exclude>
                 <exclude>build-number.txt</exclude>
+                <exclude>**/*.md</exclude>
               </excludes>
             </configuration>
           </execution>
