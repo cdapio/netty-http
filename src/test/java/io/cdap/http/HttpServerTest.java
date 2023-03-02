@@ -42,6 +42,10 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
+import io.netty.handler.codec.http.cookie.Cookie;
+import io.netty.handler.codec.http.cookie.DefaultCookie;
+import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ResourceLeakDetector;
@@ -82,6 +86,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.DeflaterInputStream;
 import java.util.zip.GZIPInputStream;
 import javax.annotation.Nullable;
+import javax.ws.rs.ext.RuntimeDelegate;
 
 /**
  * Test the HttpServer.
@@ -542,7 +547,7 @@ public class HttpServerTest {
 
   //Test the end point where the parameter in path and order of declaration in method signature are different
   @Test
-  public void testMultiplePathParametersWithParamterInDifferentOrder() throws IOException {
+  public void testMultiplePathParametersWithParameterInDifferentOrder() throws IOException {
     HttpURLConnection urlConn = request("/test/v1/message/21/user/sree", HttpMethod.GET);
     Assert.assertEquals(200, urlConn.getResponseCode());
 
@@ -695,6 +700,35 @@ public class HttpServerTest {
     testContent("/test/v1/sortedSetQueryParam?id=30&id=10&id=20&id=30", expectedContent, HttpMethod.GET);
     testContent("/test/v1/sortedSetQueryParam?id=10&id=30&id=20&id=20", expectedContent, HttpMethod.GET);
     testContent("/test/v1/sortedSetQueryParam?id=20&id=30&id=20&id=10", expectedContent, HttpMethod.GET);
+  }
+
+  @Test
+  public void testStringCookieParam() throws IOException {
+    testContent("/test/v1/stringCookieParam", "ck1:cookie value",
+                new DefaultCookie("ck1", "cookie value"));
+  }
+
+  @Test
+  public void testStringCookieParamDefaultValue() throws IOException {
+    testContent("/test/v1/stringCookieParam", "ck1:def", new Cookie[0]);
+  }
+
+  @Test
+  public void testMultipleStringCookieParam() throws IOException {
+    testContent("/test/v1/multipleStringCookieParam", "ck1:cookie value 1,ck2:cookie value 2",
+                new DefaultCookie("ck1", "cookie value 1"),
+                new DefaultCookie("ck2", "cookie value 2"));
+  }
+
+  @Test
+  public void testNettyCookieCookieParam() throws IOException {
+    testContent("/test/v1/nettyCookieParam", "ck1:cookie value",
+                new DefaultCookie("ck1", "cookie value"));
+  }
+
+  @Test
+  public void testNettyCookieParamDefaultValue() throws IOException {
+    testContent("/test/v1/nettyCookieParam", "ck1:def", new Cookie[0]);
   }
 
   @Test
@@ -967,6 +1001,15 @@ public class HttpServerTest {
 
   private void testContent(String path, String content, HttpMethod method) throws IOException {
     HttpURLConnection urlConn = request(path, method);
+    Assert.assertEquals(200, urlConn.getResponseCode());
+    Assert.assertEquals(content, getContent(urlConn));
+    urlConn.disconnect();
+  }
+
+  private void testContent(String path, String content, Cookie... cookies) throws IOException {
+    String cookie = ClientCookieEncoder.LAX.encode(cookies);
+    HttpURLConnection urlConn = request(path, HttpMethod.GET);
+    urlConn.addRequestProperty(HttpHeaderNames.COOKIE.toString(), cookie);
     Assert.assertEquals(200, urlConn.getResponseCode());
     Assert.assertEquals(content, getContent(urlConn));
     urlConn.disconnect();
