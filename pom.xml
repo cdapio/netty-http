@@ -63,7 +63,7 @@
     <surefire.redirectTestOutputToFile>true</surefire.redirectTestOutputToFile>
 
     <rs-api.version>2.0</rs-api.version>
-    <netty.version>4.1.75.Final</netty.version>
+    <netty.version>4.1.94.Final</netty.version>
     <slf4j.version>1.7.5</slf4j.version>
     <findbugs.version>2.0.1</findbugs.version>
     <beanutils.version>1.8.3</beanutils.version>
