@@ -21,6 +21,7 @@ import io.cdap.http.ChunkResponder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.LastHttpContent;
 
@@ -60,14 +61,14 @@ final class ChannelChunkResponder implements ChunkResponder {
       throw new IOException("Connection already closed.");
     }
     int chunkSize = chunk.readableBytes();
-    channel.write(new DefaultHttpContent(chunk));
-    tryFlush(chunkSize);
+    ChannelFuture channelFuture = channel.write(new DefaultHttpContent(chunk));
+    tryFlush(chunkSize, channelFuture);
   }
 
   @Override
   public void flush() {
     // Use the limit as the size to force a flush
-    tryFlush(chunkMemoryLimit);
+    tryFlush(chunkMemoryLimit, null);
   }
 
   @Override
@@ -78,10 +79,17 @@ final class ChannelChunkResponder implements ChunkResponder {
     channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
   }
 
-  private void tryFlush(int size) {
+  private void tryFlush(int size, ChannelFuture channelFuture) {
     long newSize = bufferedSize.addAndGet(size);
     if (newSize >= chunkMemoryLimit) {
       channel.flush();
+      if (channelFuture != null) {
+        try {
+          channelFuture.await();
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
       // Subtract what were flushed.
       // This is correct for single thread.
       // For concurrent calls, this provides a lower bound,
