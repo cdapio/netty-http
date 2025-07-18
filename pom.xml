@@ -48,16 +48,6 @@
     <tag>HEAD</tag>
   </scm>
 
-  <distributionManagement>
-    <repository>
-      <id>sonatype.release</id>
-      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
-    </repository>
-    <snapshotRepository>
-      <id>sonatype.snapshots</id>
-      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-    </snapshotRepository>
-  </distributionManagement>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <surefire.redirectTestOutputToFile>true</surefire.redirectTestOutputToFile>
@@ -227,16 +217,6 @@
         </configuration>
       </plugin>
 
-      <!-- Deploy plugin -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-deploy-plugin</artifactId>
-        <version>2.8</version>
-        <configuration>
-          <deployAtEnd>true</deployAtEnd>
-        </configuration>
-      </plugin>
-
       <!-- Bundle plugin -->
       <plugin>
         <groupId>org.apache.felix</groupId>
@@ -383,13 +363,14 @@
 
             <!-- Nexus deploy plugin -->
             <plugin>
-              <groupId>org.sonatype.plugins</groupId>
-              <artifactId>nexus-staging-maven-plugin</artifactId>
-              <version>1.6.2</version>
+              <groupId>org.sonatype.central</groupId>
+              <artifactId>central-publishing-maven-plugin</artifactId>
+              <version>0.8.0</version>
               <extensions>true</extensions>
               <configuration>
-                <nexusUrl>https://oss.sonatype.org</nexusUrl>
-                <serverId>sonatype.release</serverId>
+                <publishingServerId>sonatype.release</publishingServerId>
+                <autoPublish>false</autoPublish>
+                <ignorePublishedComponents>true</ignorePublishedComponents>
               </configuration>
             </plugin>
 
@@ -413,9 +394,8 @@
             <version>1.5</version>
           </plugin>
           <plugin>
-            <groupId>org.sonatype.plugins</groupId>
-            <artifactId>nexus-staging-maven-plugin</artifactId>
-            <version>1.6.2</version>
+            <groupId>org.sonatype.central</groupId>
+            <artifactId>central-publishing-maven-plugin</artifactId>
           </plugin>
         </plugins>
       </build>
