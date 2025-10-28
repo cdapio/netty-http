@@ -62,6 +62,30 @@
     <gson.version>2.2.4</gson.version>
   </properties>
 
+  <distributionManagement>
+    <snapshotRepository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/oss-exit-gate-prod/cloud-data-fusion--mavencentral</url>
+    </snapshotRepository>
+    <repository>
+      <id>artifact-registry</id>
+      <url>artifactregistry://us-maven.pkg.dev/oss-exit-gate-prod/cloud-data-fusion--mavencentral</url>
+    </repository>
+  </distributionManagement>
+
+  <repositories>
+    <repository>
+      <id>artifact-registry</id>
+      <url>artifactregistry:us-maven.pkg.dev/oss-exit-gate-prod/cloud-data-fusion--mavencentral</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+
   <dependencies>
     <dependency>
       <groupId>javax.ws.rs</groupId>
@@ -128,6 +152,13 @@
   </dependencies>
 
   <build>
+    <extensions>
+      <extension>
+        <groupId>com.google.cloud.artifactregistry</groupId>
+        <artifactId>artifactregistry-maven-wagon</artifactId>
+        <version>2.2.5</version>
+      </extension>
+    </extensions>
     <plugins>
       <!-- Compiler -->
       <plugin>
@@ -342,38 +373,6 @@
                 </execution>
               </executions>
             </plugin>
-
-            <!-- GPG signature -->
-            <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-gpg-plugin</artifactId>
-              <version>1.5</version>
-              <configuration>
-                <passphrase>${gpg.passphrase}</passphrase>
-                <useAgent>${gpg.useagent}</useAgent>
-              </configuration>
-              <executions>
-                <execution>
-                  <goals>
-                    <goal>sign</goal>
-                  </goals>
-                </execution>
-              </executions>
-            </plugin>
-
-            <!-- Nexus deploy plugin -->
-            <plugin>
-              <groupId>org.sonatype.central</groupId>
-              <artifactId>central-publishing-maven-plugin</artifactId>
-              <version>0.8.0</version>
-              <extensions>true</extensions>
-              <configuration>
-                <publishingServerId>sonatype.release</publishingServerId>
-                <autoPublish>false</autoPublish>
-                <ignorePublishedComponents>true</ignorePublishedComponents>
-              </configuration>
-            </plugin>
-
           </plugins>
         </pluginManagement>
 
@@ -392,10 +391,6 @@
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-gpg-plugin</artifactId>
             <version>1.5</version>
-          </plugin>
-          <plugin>
-            <groupId>org.sonatype.central</groupId>
-            <artifactId>central-publishing-maven-plugin</artifactId>
           </plugin>
         </plugins>
       </build>
