@@ -23,6 +23,8 @@ import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.cookie.Cookie;
+import io.netty.handler.codec.http.cookie.DefaultCookie;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -36,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
+import javax.ws.rs.CookieParam;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.PathParam;
@@ -48,7 +51,8 @@ import javax.ws.rs.QueryParam;
 public final class HttpResourceModel {
 
   private static final Set<Class<? extends Annotation>> SUPPORTED_PARAM_ANNOTATIONS =
-    Collections.unmodifiableSet(new HashSet<>(Arrays.asList(PathParam.class, QueryParam.class, HeaderParam.class)));
+    Collections.unmodifiableSet(new HashSet<>(Arrays.asList(PathParam.class, QueryParam.class, HeaderParam.class,
+                                CookieParam.class)));
 
   private final Set<HttpMethod> httpMethods;
   private final String path;
@@ -58,6 +62,7 @@ public final class HttpResourceModel {
   private final ExceptionHandler exceptionHandler;
   private final boolean isSecured;
   private final String[] requiredRoles;
+  private final CookieParser cookieParser = new CookieParser(false);
 
   /**
    * Construct a resource model with HttpMethod, method that handles httprequest, Object that contains the method.
@@ -137,6 +142,9 @@ public final class HttpResourceModel {
           if (info.containsKey(HeaderParam.class)) {
             args[idx] = getHeaderParamValue(info, request);
           }
+          if (info.containsKey(CookieParam.class)) {
+            args[idx] = getCookieParamValue(info, request);
+          }
           idx++;
         }
 
@@ -195,6 +203,16 @@ public final class HttpResourceModel {
     return hasHeader ? info.convert(request.headers().getAll(headerName)) : info.convert(defaultValue(annotations));
   }
 
+  @SuppressWarnings("unchecked")
+  private Object getCookieParamValue(Map<Class<? extends Annotation>, ParameterInfo<?>> annotations,
+                                     HttpRequest request) throws Exception {
+    Map<String, Cookie> cookies = cookieParser.parseCookies(request);
+    ParameterInfo<Cookie> info = (ParameterInfo<Cookie>) annotations.get(CookieParam.class);
+    CookieParam cookieParam = info.getAnnotation();
+    String cookieName = cookieParam.value();
+    boolean hasCookie = cookies.containsKey(cookieName);
+    return hasCookie ? info.convert(cookies.get(cookieName)) : info.convert(defaultCookie(cookieName, annotations));
+  }
   /**
    * Returns a List of String created based on the {@link DefaultValue} if it is presented in the annotations Map.
    *
@@ -208,6 +226,19 @@ public final class HttpResourceModel {
 
     DefaultValue defaultValue = defaultInfo.getAnnotation();
     return Collections.singletonList(defaultValue.value());
+  }
+
+  /**
+   * Returns a Cookie created based on the {@link DefaultValue} if it is presented in the annotations Map.
+   *
+   * @return a Cookie or null if {@link DefaultValue} is not presented
+   */
+  private Cookie defaultCookie(String name, Map<Class<? extends Annotation>, ParameterInfo<?>> annotations) {
+    List<String> strings = defaultValue(annotations);
+    if (strings == null || strings.isEmpty()) {
+      return null;
+    }
+    return new DefaultCookie(name, strings.get(0));
   }
 
   /**
@@ -239,6 +270,9 @@ public final class HttpResourceModel {
         } else if (HeaderParam.class.isAssignableFrom(annotationType)) {
           parameterInfo = ParameterInfo.create(annotation,
                                                ParamConvertUtils.createHeaderParamConverter(parameterTypes[i]));
+        } else if (CookieParam.class.isAssignableFrom(annotationType)) {
+          parameterInfo = ParameterInfo.create(annotation,
+                                               ParamConvertUtils.createCookieParamConverter(parameterTypes[i]));
         } else {
           parameterInfo = ParameterInfo.create(annotation, null);
         }

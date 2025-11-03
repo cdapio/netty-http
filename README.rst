@@ -2,7 +2,7 @@ netty-http
 ==========
 A library to develop HTTP services with `Netty <http://netty.io/>`__. Supports the capability to route end-points based on `JAX-RS <https://jax-rs-spec.java.net/>`__-style annotations. Implements Guava's Service interface to manage the runtime-state of the HTTP service.
 
-Need for this library 
+Need for this library
 ---------------------
 `Netty <http://netty.io/>`__ is a powerful framework to write asynchronous event-driven high-performance applications. While it is relatively easy to write a RESTful HTTP service using netty, the mapping between HTTP routes to handlers is
 not a straight-forward task.
@@ -142,7 +142,7 @@ Example: Sample HTTP service that manages an application lifecycle:
 
   // Setup HTTP service and add Handlers
 
-  // You can either add varargs of HttpHandler or as a list of HttpHanlders as below to the NettyService Builder
+  // You can either add varargs of HttpHandler or as a list of HttpHandlers as below to the NettyService Builder
 
     List<HttpHandler> handlers = new ArrayList<>();
     handlers.add(new PingHandler());
@@ -175,7 +175,7 @@ Code Sample:
                                         .setCertificatePassword("certificatePassword").build())
                              .build();
 
-* Set ``String:certificatePassword`` as "null" when not applicable 
+* Set ``String:certificatePassword`` as "null" when not applicable
 * ``File:keyStore`` points to the key store that holds your SSL certificate
 
 References

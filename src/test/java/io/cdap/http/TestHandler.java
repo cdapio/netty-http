@@ -28,6 +28,8 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.cookie.Cookie;
+import io.netty.handler.codec.http.cookie.DefaultCookie;
 import org.junit.Assert;
 
 import java.io.File;
@@ -43,6 +45,7 @@ import java.util.List;
 import java.util.SortedSet;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.ws.rs.CookieParam;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
@@ -528,6 +531,27 @@ public class TestHandler extends AbstractHttpHandler {
   public void testSortedSetQueryParam(HttpRequest request, HttpResponder responder,
                                       @QueryParam("id") SortedSet<Integer> ids) {
     responder.sendString(HttpResponseStatus.OK, GSON.toJson(ids));
+  }
+
+  @Path("/stringCookieParam")
+  @GET
+  public void testStringCookieParam(HttpRequest request, HttpResponder responder,
+                                    @CookieParam("ck1") @DefaultValue("def") String ck1) {
+    responder.sendString(HttpResponseStatus.OK, "ck1:" + ck1);
+  }
+
+  @Path("/multipleStringCookieParam")
+  @GET
+  public void testMultipleStringCookieParam(HttpRequest request, HttpResponder responder,
+                                            @CookieParam("ck1") String ck1, @CookieParam("ck2") String ck2) {
+    responder.sendString(HttpResponseStatus.OK, "ck1:" + ck1 + ",ck2:" + ck2);
+  }
+
+  @Path("/nettyCookieParam")
+  @GET
+  public void testNettyCookieParam(HttpRequest request, HttpResponder responder,
+                                   @CookieParam("ck1") @DefaultValue("def") Cookie ck1) {
+    responder.sendString(HttpResponseStatus.OK, "ck1:" + ck1.value());
   }
 
   @Path("/listHeaderParam")
