@@ -34,6 +34,7 @@ import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.compression.StandardCompressionOptions;
 import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
@@ -416,7 +417,12 @@ public final class NettyHttpService {
             pipeline.addLast("ssl", sslHandlerFactory.create(ch.alloc()));
           }
           pipeline.addLast("codec", new HttpServerCodec());
-          pipeline.addLast("compressor", new HttpContentCompressor());
+          // Only offer gzip and deflate. The no-arg constructor in newer Netty versions also turns on
+          // zstd (and brotli) whenever those libraries are on the classpath, and fails with a
+          // NoSuchMethodError when an older zstd-jni is loaded first (for example from a Hadoop
+          // or Spark runtime classpath).
+          pipeline.addLast("compressor", new HttpContentCompressor(StandardCompressionOptions.gzip(),
+                                                                   StandardCompressionOptions.deflate()));
           pipeline.addLast("chunkedWriter", new ChunkedWriteHandler());
           pipeline.addLast("keepAlive", new HttpServerKeepAliveHandler());
           pipeline.addLast("router", new RequestRouter(resourceHandler, httpChunkLimit, sslHandlerFactory != null));
