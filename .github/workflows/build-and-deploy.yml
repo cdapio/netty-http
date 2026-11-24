@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [ develop, release/1.7 ]
+        branch: [ release/1.8 ]
 
     steps:
       - name: Get Secrets from GCP Secret Manager

@@ -885,6 +885,25 @@ public class HttpServerTest {
   }
 
   @Test
+  public void testCompressResponseOnlyGzipOrDeflate() throws Exception {
+    // Encodings other than gzip and deflate are not offered, so the response is not compressed.
+    HttpURLConnection urlConn = request("/test/v1/compressResponse?message=Testing+message", HttpMethod.GET);
+    urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), "zstd, br, snappy");
+
+    Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
+    Assert.assertNull(urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()));
+    Assert.assertEquals("Testing message", getContent(urlConn));
+
+    // When gzip is also accepted, gzip is used.
+    urlConn = request("/test/v1/compressResponse?message=Testing+message", HttpMethod.GET);
+    urlConn.setRequestProperty(HttpHeaderNames.ACCEPT_ENCODING.toString(), "zstd, br, gzip");
+
+    Assert.assertEquals(HttpResponseStatus.OK.code(), urlConn.getResponseCode());
+    Assert.assertEquals("gzip", urlConn.getHeaderField(HttpHeaderNames.CONTENT_ENCODING.toString()));
+    Assert.assertEquals("Testing message", getContent(urlConn));
+  }
+
+  @Test
   public void testContinueHandler() throws Exception {
     // Send two request with BodyConsumer handling with keep-alive and expect continue header
     // The second request should be using the same connection as the first one
